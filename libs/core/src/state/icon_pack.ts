@@ -149,9 +149,13 @@ export class IconPackManager {
    * @returns A new instance of IconPackManager
    */
   public static async create(): Promise<IconPackManager> {
+    const [availablePacks, settings] = await Promise.all([
+      IconPackList.getAsync(),
+      Settings.getAsync(),
+    ]);
     const instance = new IconPackManager(
-      (await IconPackList.getAsync()).asArray(),
-      (await Settings.getAsync()).inner.activeIconPacks,
+      availablePacks.asArray(),
+      settings.inner.activeIconPacks,
     );
     instance.resolveAvailableIcons();
     instance.cacheActiveIconPacks();
@@ -194,17 +198,19 @@ export class IconPackManager {
 
     if (!this.isListeningForChanges) {
       this.isListeningForChanges = true;
-      const unlistenerIcons = await IconPackList.onChange((list) => {
-        this._availableIconPacks = JSON.parse(JSON.stringify(list.all()));
-        this.resolveAvailableIcons();
-        this.cacheActiveIconPacks();
-        this.callbacks.forEach((cb) => cb());
-      });
-      const unlistenerSettings = await Settings.onChange((settings) => {
-        this._activeIconPackIds = settings.inner.activeIconPacks;
-        this.cacheActiveIconPacks();
-        this.callbacks.forEach((cb) => cb());
-      });
+      const [unlistenerIcons, unlistenerSettings] = await Promise.all([
+        IconPackList.onChange((list) => {
+          this._availableIconPacks = JSON.parse(JSON.stringify(list.all()));
+          this.resolveAvailableIcons();
+          this.cacheActiveIconPacks();
+          this.callbacks.forEach((cb) => cb());
+        }),
+        Settings.onChange((settings) => {
+          this._activeIconPackIds = settings.inner.activeIconPacks;
+          this.cacheActiveIconPacks();
+          this.callbacks.forEach((cb) => cb());
+        }),
+      ]);
       this.unlisteners = [unlistenerIcons, unlistenerSettings];
     }
 
