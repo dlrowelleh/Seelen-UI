@@ -19,6 +19,11 @@ subscribe(SeelenEvent.UserAppWindowsChanged, ({ payload }) => {
 export const previews = lazyRune(() => invoke(SeelenCommand.GetUserAppWindowsPreviews));
 subscribe(SeelenEvent.UserAppWindowsPreviewsChanged, previews.setByPayload);
 
+export async function refreshPreviews(): Promise<void> {
+  const snapshot = await invoke(SeelenCommand.GetUserAppWindowsPreviews);
+  previews.value = snapshot;
+}
+
 export const focusedWinId = lazyRune(async () => (await invoke(SeelenCommand.GetFocusedApp)).hwnd);
 subscribe(SeelenEvent.GlobalFocusChanged, (e) => {
   focusedWinId.value = e.payload.hwnd;
@@ -27,7 +32,8 @@ subscribe(SeelenEvent.GlobalFocusChanged, (e) => {
 await Promise.all([
   settings.init(),
   windows.init(),
-  previews.init(),
   focusedWinId.init(),
   monitors.init(),
 ]);
+
+// Window previews are initialized on the first switcher trigger, not during app startup.

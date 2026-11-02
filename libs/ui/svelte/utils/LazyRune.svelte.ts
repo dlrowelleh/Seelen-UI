@@ -30,7 +30,7 @@
  */
 export class LazyRune<T> {
   private _value = $state.raw<T>();
-  private initialized = false;
+  private initialized = $state(false);
 
   constructor(private initializer: () => Promise<T> | T) {
     this.setByPayload = this.setByPayload.bind(this);

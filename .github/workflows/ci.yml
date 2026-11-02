@@ -1,6 +1,9 @@
 name: Continuous Integration
 
 on:
+  push:
+    branches:
+      - perf/lightweight-widget-reconcile
   pull_request:
     branches:
       - master

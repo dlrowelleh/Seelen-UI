@@ -32,12 +32,20 @@ event_manager!(UserAppsManager, UserAppWinEvent);
 
 impl UserAppsManager {
     fn init() -> Self {
-        let manager = Self {
+        Self {
             interactable_windows: SyncVec::from(Self::init_listing_app_windows()),
-        };
-        Self::init_flash_tracking();
-        Self::init_badge_notifications_tracking();
-        manager
+        }
+    }
+
+    /// Start shell attention and notification-badge tracking only when the Seelen dock is enabled.
+    /// Window enumeration for Alt+Tab does not need these taskbar-specific services.
+    pub fn init_taskbar_tracking() {
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            let _ = Self::instance();
+            Self::init_flash_tracking();
+            Self::init_badge_notifications_tracking();
+        });
     }
 
     pub fn instance() -> &'static Self {

@@ -184,6 +184,12 @@ class IconPackManagerMock extends IconPackManager {
     this._activeIconPackIds = actives;
     this.cacheActiveIconPacks();
   }
+
+  public reindex(): void {
+    // Rebuild derived maps after a test mutates entries. resolveAvailableIcons() is not
+    // called again because it mutates existing icon paths by prefixing their pack path.
+    this.cacheActiveIconPacks();
+  }
 }
 
 Deno.test("IconPackManager", async (t) => {
@@ -236,6 +242,34 @@ Deno.test("IconPackManager", async (t) => {
           umid: "MSEdge",
         }),
         onlyBase(`${A_PATH}\\${GOT_BY_UMID}`),
+      );
+    });
+
+    await t.step("higher-priority pack path beats lower-priority pack UMID", () => {
+      const ctx = new IconPackManagerTestContext(["b", "a"]); // packA has higher priority
+      assertEquals(
+        ctx.instance.getIconPath({
+          path: "C:\\Windows\\explorer.exe",
+          umid: "MSEdge",
+        }),
+        onlyBase(`${A_PATH}\\${GOT_BY_PATH}`),
+      );
+    });
+
+    await t.step("earlier filename match beats later exact path in the same pack", () => {
+      const ctx = new IconPackManagerTestContext(["a"]);
+      ctx.instance.iconPacks[0].entries.unshift({
+        type: "unique",
+        umid: null,
+        redirect: null,
+        path: "C:\\Other\\explorer.exe",
+        icon: onlyBase(`${A_PATH}\\EARLIER_FILENAME`),
+      });
+      ctx.instance.reindex();
+
+      assertEquals(
+        ctx.instance.getIconPath({ path: "C:\\Windows\\explorer.exe" }),
+        onlyBase(`${A_PATH}\\EARLIER_FILENAME`),
       );
     });
 
@@ -364,6 +398,7 @@ Deno.test("IconPackManager", async (t) => {
           redirect: null,
           icon: onlyBase(B_PATH + "\\RedirectTargetIcon.png"),
         });
+        ctx.instance.reindex();
 
         assertEquals(
           ctx.instance.getIconPath({ umid: "RedirectTest" }),
@@ -382,8 +417,10 @@ Deno.test("IconPackManager", async (t) => {
           umid: "BadRedirect",
           path: "C:\\redirect\\source.exe",
           redirect: "C:\\nonexistent\\path.exe",
-          icon: onlyBase(A_PATH + "\\ShouldNotUseThis.png"), // <-- should be ignored inclusively if redirect points to non-existent path
+          // This icon must be ignored when its redirect target cannot be resolved.
+          icon: onlyBase(A_PATH + "\\ShouldNotUseThis.png"),
         });
+        ctx.instance.reindex();
 
         assertNull(ctx.instance.getIconPath({ umid: "BadRedirect" }));
       },
@@ -417,6 +454,7 @@ Deno.test("IconPackManager", async (t) => {
           redirect: null,
           icon: onlyBase(C_PATH + "\\FinalIcon.png"),
         });
+        ctx.instance.reindex();
 
         assertEquals(
           ctx.instance.getIconPath({ umid: "ChainRedirect" }),
@@ -437,6 +475,7 @@ Deno.test("IconPackManager", async (t) => {
           redirect: "C:\\redirect\\missing.exe",
           icon: onlyBase(A_PATH + "\\IgnoreMe.png"),
         });
+        ctx.instance.reindex();
 
         // No matching entry for the redirect target
         assertNull(ctx.instance.getIconPath({ umid: "BrokenChain" }));
@@ -453,6 +492,7 @@ Deno.test("IconPackManager", async (t) => {
         redirect: "C:\\some\\file.txt", // <-- redirect to txt file
         icon: onlyBase(A_PATH + "\\WrongIcon.png"), // <-- should be ignored
       });
+      ctx.instance.reindex();
 
       assertEquals(
         ctx.instance.getIconPath({ umid: "RedirectToExtension" }),
@@ -479,6 +519,7 @@ Deno.test("IconPackManager", async (t) => {
       redirect: "C:\\circle\\app1.exe",
       icon: onlyBase("IgnoredIcon2.png"),
     });
+    ctx.instance.reindex();
 
     assertNull(ctx.instance.getIconPath({ umid: "CircularRef1" }));
     assertNull(ctx.instance.getIconPath({ path: "C:\\circle\\app1.exe" }));
@@ -496,6 +537,7 @@ Deno.test("IconPackManager", async (t) => {
       redirect: "C:\\circle\\self.exe", // Se redirige a sí mismo
       icon: onlyBase("IgnoredIcon.png"),
     });
+    ctx.instance.reindex();
 
     assertNull(ctx.instance.getIconPath({ umid: "SelfRef" }));
   });
@@ -529,6 +571,7 @@ Deno.test("IconPackManager", async (t) => {
         redirect: "C:\\circle\\a.exe",
         icon: onlyBase("IgnoredC.png"),
       });
+      ctx.instance.reindex();
 
       assertNull(ctx.instance.getIconPath({ path: "C:\\circle\\a.exe" }));
     },

@@ -35,6 +35,18 @@ subscribe(SeelenEvent.UserAppWindowsChanged, interactables.setByPayload);
 export const previews = lazyRune(() => invoke(SeelenCommand.GetUserAppWindowsPreviews));
 subscribe(SeelenEvent.UserAppWindowsPreviewsChanged, previews.setByPayload);
 
+let previewsInitPromise: Promise<void> | undefined;
+
+export function ensurePreviewsLoaded(): Promise<void> {
+  if (!previewsInitPromise) {
+    previewsInitPromise = previews.init().catch((error) => {
+      previewsInitPromise = undefined;
+      throw error;
+    });
+  }
+  return previewsInitPromise;
+}
+
 export const windowsColors = lazyRune<Record<number, UserAppWindowColors>>(
   () => invoke(SeelenCommand.GetUserAppWindowsColors),
 );
@@ -61,7 +73,6 @@ await Promise.all([
   settings.init(),
   selfWinId.init(),
   interactables.init(),
-  previews.init(),
   windowsColors.init(),
   focused.init(),
   widgetStatuses.init(),

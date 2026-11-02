@@ -90,7 +90,7 @@
   onfocus={handleFocus}
 >
   <div class="task-header">
-    <FileIcon class="task-icon" path={task.relaunch?.icon || task.process.path} umid={task.umid} />
+    <FileIcon class="task-icon" path={task.relaunch?.icon || task.process.path} umid={task.umid} lazy />
     <div class="task-title">{task.title}</div>
     <button
       data-skin="transparent"
@@ -104,7 +104,13 @@
   </div>
   <div class="task-preview-container">
     {#if preview}
-      <img class="task-preview" src={`data:image/webp;base64,${preview.data}`} alt="" />
+      <img
+        class="task-preview"
+        src={`data:image/webp;base64,${preview.data}`}
+        alt=""
+        loading="lazy"
+        decoding="async"
+      />
     {:else}
       <MissingIcon class="task-no-preview" />
     {/if}

@@ -2,12 +2,24 @@ import { invoke, SeelenCommand, SeelenEvent, subscribe } from "@seelen-ui/lib";
 import { FolderType, type StartMenuItem } from "@seelen-ui/lib/types";
 import { lazyRune } from "libs/ui/svelte/utils";
 
-const desktop = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Desktop }));
-const downloads = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Downloads }));
-const documents = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Documents }));
-const music = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Music }));
-const pictures = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Pictures }));
-const videos = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Videos }));
+const desktop = lazyRune(() =>
+  invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Desktop }),
+);
+const downloads = lazyRune(() =>
+  invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Downloads }),
+);
+const documents = lazyRune(() =>
+  invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Documents }),
+);
+const music = lazyRune(() =>
+  invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Music }),
+);
+const pictures = lazyRune(() =>
+  invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Pictures }),
+);
+const videos = lazyRune(() =>
+  invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Videos }),
+);
 
 subscribe(SeelenEvent.UserFolderChanged, ({ payload: { ofFolder, content } }) => {
   switch (ofFolder) {
@@ -32,14 +44,30 @@ subscribe(SeelenEvent.UserFolderChanged, ({ payload: { ofFolder, content } }) =>
   }
 });
 
-await Promise.all([
-  desktop.init(),
-  downloads.init(),
-  documents.init(),
-  music.init(),
-  pictures.init(),
-  videos.init(),
-]);
+let loadPromise: Promise<void> | undefined;
+
+/**
+ * Folder enumeration is only required for file search. Do not fetch six user-folder
+ * listings while the Start-menu popup is mounting.
+ */
+export function ensureKnownFoldersLoaded(): Promise<void> {
+  if (!loadPromise) {
+    loadPromise = Promise.all([
+      desktop.init(),
+      downloads.init(),
+      documents.init(),
+      music.init(),
+      pictures.init(),
+      videos.init(),
+    ])
+      .then(() => undefined)
+      .catch((error) => {
+        loadPromise = undefined;
+        console.error("Failed to load known-folder contents:", error);
+      });
+  }
+  return loadPromise;
+}
 
 function pathAsItem(path: string): StartMenuItem {
   return {
@@ -52,13 +80,15 @@ function pathAsItem(path: string): StartMenuItem {
 }
 
 const _foldersAsStartMenuItems = $derived.by(() => {
+  // LazyRune initialization is reactive, so the derived list fills in once the
+  // requested folder results arrive without blocking the menu or throwing early.
   return [
-    desktop.value.map(pathAsItem),
-    downloads.value.map(pathAsItem),
-    documents.value.map(pathAsItem),
-    music.value.map(pathAsItem),
-    pictures.value.map(pathAsItem),
-    videos.value.map(pathAsItem),
+    desktop.isInitialized() ? desktop.value.map(pathAsItem) : [],
+    downloads.isInitialized() ? downloads.value.map(pathAsItem) : [],
+    documents.isInitialized() ? documents.value.map(pathAsItem) : [],
+    music.isInitialized() ? music.value.map(pathAsItem) : [],
+    pictures.isInitialized() ? pictures.value.map(pathAsItem) : [],
+    videos.isInitialized() ? videos.value.map(pathAsItem) : [],
   ].flat();
 });
 
@@ -68,34 +98,3 @@ export const foldersAsStartMenuItems = {
   },
 };
 
-// =======================================================
-// ======================For Debug========================
-// =======================================================
-
-const extensionCounts: Record<string, number> = {};
-let index = 0;
-function process(deadline: IdleDeadline) {
-  while (index < _foldersAsStartMenuItems.length && deadline.timeRemaining() > 0) {
-    const item = _foldersAsStartMenuItems[index++];
-    const extension = item?.path.split(".").pop();
-    if (extension) {
-      extensionCounts[extension] ??= 0;
-      extensionCounts[extension]++;
-    }
-  }
-
-  if (index < _foldersAsStartMenuItems.length) {
-    requestIdleCallback(process);
-    return;
-  }
-
-  invoke(SeelenCommand.WriteFile, {
-    filename: "index.log",
-    content: JSON.stringify({
-      totalFiles: _foldersAsStartMenuItems.length,
-      extensionCounts,
-    }),
-  });
-}
-
-requestIdleCallback(process);

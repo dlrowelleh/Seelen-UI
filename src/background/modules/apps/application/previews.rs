@@ -91,6 +91,17 @@ impl WinPreviewManager {
             self.register_window(hwnd);
         }
 
+        // The dock's maximized-window gradient only needs colors for the focused
+        // maximized window. Capture that one on startup, then refresh it on focus/title/
+        // geometry changes. Full screenshots for every app remain on-demand.
+        let foreground = Window::get_foregrounded();
+        if crate::state::application::FULL_STATE.load().is_weg_enabled()
+            && foreground.is_maximized()
+            && UserAppsManager::instance().contains_win(&foreground)
+        {
+            self.enqueue_capture(foreground.address());
+        }
+
         UserAppsManager::subscribe(|e| match e {
             UserAppWinEvent::Added(addr) => {
                 WINDOWS_PREVIEWS.register_window(addr);
@@ -103,22 +114,25 @@ impl WinPreviewManager {
             }
         });
 
-        HookManager::subscribe(|(event, window)| {
-            if !USER_APPS_MANAGER.contains_win(&window) {
+        // Keep only the active maximized window's edge colors current for the dock.
+        // Task-switcher/dock-preview sessions explicitly request complete snapshots.
+        HookManager::subscribe(|(event, origin)| {
+            if !crate::state::application::FULL_STATE.load().is_weg_enabled() {
                 return;
             }
-            let addr = window.address();
-            match event {
-                WinEvent::ObjectNameChange | WinEvent::SynDebouncedRectChange => {
-                    WINDOWS_PREVIEWS.enqueue_capture(addr);
+
+            let window = match event {
+                WinEvent::SystemForeground => Window::get_foregrounded(),
+                WinEvent::ObjectNameChange | WinEvent::SynDebouncedRectChange
+                    if origin.is_focused() =>
+                {
+                    origin
                 }
-                WinEvent::SystemMinimizeEnd => {
-                    std::thread::spawn(move || {
-                        std::thread::sleep(Duration::from_millis(300));
-                        WINDOWS_PREVIEWS.enqueue_capture(addr);
-                    });
-                }
-                _ => {}
+                _ => return,
+            };
+
+            if window.is_maximized() && USER_APPS_MANAGER.contains_win(&window) {
+                WINDOWS_PREVIEWS.enqueue_capture(window.address());
             }
         });
 
@@ -142,7 +156,6 @@ impl WinPreviewManager {
                 capture,
             },
         );
-        self.enqueue_capture(addr);
     }
 
     fn enqueue_capture(&self, addr: isize) {
@@ -218,6 +231,14 @@ impl WinPreviewManager {
         Self::send(WinPreviewEvent::ColorsUpdated(addr));
 
         Ok(())
+    }
+
+    /// Request fresh screenshots for the current Alt+Tab session. This is deliberately
+    /// explicit rather than event-driven so hidden switchers do not keep capturing windows.
+    pub fn refresh_all(&self) {
+        for hwnd in USER_APPS_MANAGER.interactable_windows.map(|window| window.hwnd) {
+            self.enqueue_capture(hwnd);
+        }
     }
 
     pub fn get_previews(&self) -> HashMap<isize, UserAppWindowPreview> {

@@ -1,7 +1,7 @@
 import type { StartMenuItem, SystemSettingEntry } from "@seelen-ui/lib/types";
 import { Document } from "flexsearch";
 import { globalState } from "./mod.svelte";
-import { foldersAsStartMenuItems } from "./knownFolders.svelte";
+import { ensureKnownFoldersLoaded, foldersAsStartMenuItems } from "./knownFolders.svelte";
 
 const APPS_AND_FILES_LIMIT = 21;
 /** Settings shown together with apps and files, kept low to not bury the apps results. */
@@ -201,6 +201,11 @@ export const searchState = {
 
   set searchQuery(value: string) {
     rawSearch = value;
+    const query = value.trim().toLowerCase();
+    // Default search includes files; apps:/settings:/web: do not need folder enumeration.
+    if (query && (!/^(apps|settings|web):/.test(query) || query.startsWith("files:"))) {
+      void ensureKnownFoldersLoaded();
+    }
   },
 
   get searchFilter() {

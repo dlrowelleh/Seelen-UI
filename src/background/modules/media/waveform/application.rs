@@ -246,7 +246,7 @@ fn run_capture_loop(
                 };
                 WaveformManager::send(WaveformEvent::Tick);
             }
-            std::thread::sleep(std::time::Duration::from_millis(5));
+            std::thread::sleep(std::time::Duration::from_millis(10));
             continue;
         }
 

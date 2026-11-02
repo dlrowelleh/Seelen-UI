@@ -32,7 +32,9 @@
 <div class="weg-item-preview-container slu-std-popover">
   <div class="weg-item-preview-list">
     {#each previewState.currentInteractables as win (win.hwnd)}
-      {@const preview = previewState.previews.value[win.hwnd]}
+      {@const preview = previewState.previews.isInitialized()
+        ? previewState.previews.value[win.hwnd]
+        : undefined}
       <div
         role="button"
         tabindex="0"
@@ -53,6 +55,8 @@
               class="weg-item-preview-image"
               src="data:image/webp;base64,{preview.data}"
               alt={win.title}
+              loading="lazy"
+              decoding="async"
             />
           {:else}
             <MissingIcon class="weg-item-no-preview" />

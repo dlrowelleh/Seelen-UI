@@ -14,8 +14,12 @@ use windows::Win32::{
     UI::{
         Accessibility::{HWINEVENTHOOK, SetWinEventHook},
         WindowsAndMessaging::{
-            DispatchMessageW, EVENT_MAX, EVENT_MIN, GetMessageW, MSG, OBJID_WINDOW,
-            TranslateMessage,
+            DispatchMessageW, EVENT_OBJECT_CREATE, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
+            EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_PARENTCHANGE,
+            EVENT_OBJECT_SHOW, EVENT_OBJECT_STATECHANGE, EVENT_OBJECT_UNCLOAKED,
+            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZESTART,
+            EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZESTART, GetMessageW, MSG,
+            OBJID_WINDOW, TranslateMessage,
         },
     },
 };
@@ -97,15 +101,35 @@ impl HookManager {
         Self::set_event_handler_priority(&eid, 1);
 
         spawn_named_thread("WinEventHook", move || unsafe {
-            SetWinEventHook(
-                EVENT_MIN,
-                EVENT_MAX,
-                None,
-                Some(HookManager::raw_win_event_hook_recv),
-                0,
-                0,
-                0,
-            );
+            // Subscribe only to events consumed by Seelen's window tracker, taskbar and
+            // window manager. EVENT_MIN..EVENT_MAX delivers thousands of unrelated
+            // accessibility events (text, menus, selection, scrolling) to this process.
+            // Keep the ranges narrow so USER32 filters them before our callback is invoked.
+            const EVENT_RANGES: &[(u32, u32)] = &[
+                (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
+                (EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND),
+                (EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND),
+                (EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE),
+                (EVENT_OBJECT_STATECHANGE, EVENT_OBJECT_STATECHANGE),
+                (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE),
+                (EVENT_OBJECT_PARENTCHANGE, EVENT_OBJECT_PARENTCHANGE),
+                (EVENT_OBJECT_UNCLOAKED, EVENT_OBJECT_UNCLOAKED),
+            ];
+
+            for &(event_min, event_max) in EVENT_RANGES {
+                let hook = SetWinEventHook(
+                    event_min,
+                    event_max,
+                    None,
+                    Some(HookManager::raw_win_event_hook_recv),
+                    0,
+                    0,
+                    0,
+                );
+                if hook.is_invalid() {
+                    log::error!("Failed to register WinEvent hook for {event_min:#x}..={event_max:#x}");
+                }
+            }
 
             let mut msg: MSG = MSG::default();
             while GetMessageW(&mut msg, None, 0, 0).as_bool() {
@@ -179,6 +203,16 @@ pub fn register_win_hook() -> Result<()> {
                 continue;
             }
 
+            let state = FULL_STATE.load();
+            let needs_edge_tracking =
+                state.is_weg_enabled() || state.settings.by_widget.fancy_toolbar.enabled;
+            if !needs_edge_tracking {
+                // No dock/toolbar consumes mouse-edge updates. Avoid waking USER32 at 10 Hz
+                // when the feature is disabled; re-check settings once per second.
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+
             if let Ok(pos) = Mouse::get_cursor_pos()
                 && last_pos != pos
             {
@@ -218,7 +252,7 @@ pub fn init_zombie_window_killer() {
             .log_error();
 
         loop {
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            std::thread::sleep(std::time::Duration::from_secs(30));
 
             // Pause when session is not interactive to reduce CPU usage
             if !IS_INTERACTIVE_SESSION.load(Ordering::Acquire) {

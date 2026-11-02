@@ -22,7 +22,7 @@
   let icon: IconState = $derived.by(() => {
     // Depend on _version to trigger reactivity when icon pack changes
     iconPackManager._version;
-    const icon = iconPackManager.value.getIcon({ path, umid });
+    const icon = iconPackManager.getIcon({ path, umid });
     if (icon) {
       return {
         src: (prefersDarkColorScheme.value ? icon.dark : icon.light) || icon.base,
@@ -36,9 +36,24 @@
 
   // Watch for src becoming null (trigger icon extraction)
   $effect(() => {
+    // Wait for the asynchronously initialized icon pack before issuing extraction IPC.
+    if (!iconPackManager.isReady) return;
+
     if (!mounted.value) {
-      IconPackManager.requestIconExtraction({ path, umid });
-      mounted.value = true;
+      const extract = () => {
+        if (mounted.value) return;
+        mounted.value = true;
+        IconPackManager.requestIconExtraction({ path, umid });
+      };
+
+      // Alt+Tab can mount many cards at once. Defer their native icon extraction
+      // requests until the renderer is idle so the first switcher frame stays responsive.
+      if (lazy) {
+        const idleId = requestIdleCallback(extract, { timeout: 1000 });
+        return () => cancelIdleCallback(idleId);
+      }
+
+      extract();
     }
 
     // Trigger icon extraction when src goes from non-null to null

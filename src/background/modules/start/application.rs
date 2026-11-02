@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
-use std::sync::{Arc, LazyLock, OnceLock};
+use std::sync::{Arc, LazyLock, OnceLock, atomic::{AtomicBool, Ordering}};
 use std::time::Duration;
 
 use notify_debouncer_full::{
@@ -24,6 +24,8 @@ use crate::{
     utils::lock_free::SyncVec,
     windows_api::{Com, WindowsApi},
 };
+
+static PACKAGED_RELOAD_SCHEDULED: AtomicBool = AtomicBool::new(false);
 
 pub struct StartMenuManager {
     /// win32 unpackaged, from the current user start menu folder. Only refreshed by the file watcher.
@@ -78,8 +80,8 @@ impl StartMenuManager {
         &START_MENU_MANAGER
     }
 
-    /// Loads the start menu items and sets up
-    /// the listeners that keep them updated. Should be awaited during the app startup.
+    /// Loads the start-menu index and registers file/package listeners.
+    /// Run on the long-lived COM STA thread so PackageCatalog callbacks keep flowing.
     pub fn initialize() -> Result<()> {
         let manager = Self::instance();
         crate::measure!("StartMenu Shortcuts", manager.load_shortcuts());
@@ -88,6 +90,7 @@ impl StartMenuManager {
             Self::load_packaged_items()?
         ));
         manager.setup_listeners();
+        Self::send(StartMenuEvent::ItemsRefreshed);
         Ok(())
     }
 
@@ -336,24 +339,37 @@ impl StartMenuManager {
         Self::reload_shortcuts();
     }
 
+    fn schedule_packaged_reload() {
+        // Package deployment may emit several events in a burst. Coalesce them into one
+        // delayed refresh, then queue the WinRT scan back onto the owning STA.
+        if PACKAGED_RELOAD_SCHEDULED.swap(true, Ordering::AcqRel) {
+            return;
+        }
+
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(1000));
+            if let Err(err) = crate::app::execute_start_menu_com_task(|| {
+                Self::reload_packaged().log_error();
+                PACKAGED_RELOAD_SCHEDULED.store(false, Ordering::Release);
+            }) {
+                PACKAGED_RELOAD_SCHEDULED.store(false, Ordering::Release);
+                log::error!("Failed to queue Start-menu package refresh: {err}");
+            }
+        });
+    }
+
     fn setup_package_catalog_listener(&self) -> Result<()> {
         let catalog = PackageCatalog::OpenForCurrentUser()?;
 
         catalog.PackageInstalling(&TypedEventHandler::new(|_catalog, _args| {
             log::debug!("Package installing event detected");
-            std::thread::spawn(|| {
-                std::thread::sleep(Duration::from_millis(1000));
-                Self::reload_packaged().log_error();
-            });
+            Self::schedule_packaged_reload();
             Ok(())
         }))?;
 
         catalog.PackageUninstalling(&TypedEventHandler::new(|_catalog, _args| {
             log::debug!("Package uninstalling event detected");
-            std::thread::spawn(|| {
-                std::thread::sleep(Duration::from_millis(1000));
-                Self::reload_packaged().log_error();
-            });
+            Self::schedule_packaged_reload();
             Ok(())
         }))?;
 

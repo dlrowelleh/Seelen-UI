@@ -145,7 +145,10 @@ impl NotificationManager {
                 spawn_named_thread("Notification Manager", || -> Result<()> {
                     RELEASED.store(false, Ordering::SeqCst);
                     while !RELEASED.load(Ordering::Acquire) {
-                        std::thread::sleep(std::time::Duration::from_secs(1));
+                        // This fallback is used only when WinRT's notification event
+                        // subscription is unavailable. Avoid polling the full notification
+                        // history every second; three seconds keeps updates reasonably prompt.
+                        std::thread::sleep(std::time::Duration::from_secs(3));
                         // Pause when session is not interactive to reduce CPU usage
                         if !IS_INTERACTIVE_SESSION.load(Ordering::Acquire) {
                             continue;

@@ -4,6 +4,7 @@ import { debounce } from "lodash";
 
 export class PersistentRune<T> {
   private _ready = false;
+  private _hasStoredValue = $state(false);
   private _value: T;
   private storeKey: string;
   private schema?: ZodSchema<T>;
@@ -23,7 +24,10 @@ export class PersistentRune<T> {
   ): Promise<PersistentRune<T>> {
     const rune = new PersistentRune(storeKey, initial, schema);
     const stored = await rune.loadFromFile();
-    if (stored !== null) rune._value = stored; // _ready=false → no save triggered
+    if (stored !== null) {
+      rune._value = stored; // _ready=false → no save triggered
+      rune._hasStoredValue = true;
+    }
     rune._ready = true;
     return rune;
   }
@@ -57,12 +61,17 @@ export class PersistentRune<T> {
     }
   }
 
+  get hasStoredValue(): boolean {
+    return this._hasStoredValue;
+  }
+
   get value(): T {
     return this._value;
   }
 
   set value(value: T) {
     this._value = value;
+    this._hasStoredValue = true;
     if (this._ready) {
       this.debouncedSave(value);
     }

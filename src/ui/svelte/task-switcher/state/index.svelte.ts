@@ -1,7 +1,7 @@
 import { invoke, SeelenCommand } from "@seelen-ui/lib";
 import { debounce } from "lodash";
 import z from "zod";
-import { focusedWinId, previews, settings, widget, windows } from "./getters.svelte.ts";
+import { focusedWinId, previews, refreshPreviews, settings, widget, windows } from "./getters.svelte.ts";
 import { monitors } from "libs/ui/svelte/runes/monitors.svelte.ts";
 
 export { focusedWinId, previews, settings, widget, windows };
@@ -81,7 +81,7 @@ class State {
   }
 
   get previews() {
-    return previews.value;
+    return previews.isInitialized() ? previews.value : {};
   }
 
   get selectedWindow() {
@@ -98,6 +98,9 @@ class State {
 }
 
 export const globalState = new State();
+
+// Screenshots are expensive and only useful after the user opens Alt+Tab.
+let previewsRequested = false;
 
 // +++++++++++++++++++++++ Visibility +++++++++++++++++++++++
 
@@ -134,7 +137,9 @@ $effect.root(() => {
   // Poll the hardware Alt key state instead of relying on keyup events,
   // since the widget-focus trick fakes an Alt keydown that never reaches window.onkeyup.
   $effect(() => {
-    if (!showing) {
+    // Polling uses a native IPC call every 50 ms. It is only needed when releasing
+    // Alt commits the selection; the manual Ctrl+Alt+Tab switcher does not use it.
+    if (!showing || !autoConfirm) {
       return;
     }
 
@@ -148,7 +153,7 @@ $effect.root(() => {
           onAltKeyUp();
         }
         wasAltDown = isAltDown;
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 16));
       }
     };
     poll();
@@ -187,6 +192,18 @@ widget.onTrigger((payload) => {
   const targetWindows = filteredWindows;
   if (targetWindows.length === 0) {
     return;
+  }
+
+  if (!previewsRequested) {
+    previewsRequested = true;
+    void previews.init().catch((error) => {
+      previewsRequested = false;
+      console.error("Failed to load task-switcher previews:", error);
+    });
+  } else {
+    void refreshPreviews().catch((error) => {
+      console.error("Failed to refresh task-switcher previews:", error);
+    });
   }
 
   // Use the currently selected window when already showing, otherwise start from focused
