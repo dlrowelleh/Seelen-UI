@@ -30,7 +30,7 @@ pub enum PodSource {
 }
 
 // Background widgets are mostly static; avoid waking every renderer every few seconds.
-const LIVENESS_PROVE_INTERVAL: Duration = Duration::from_secs(30);
+const LIVENESS_PROVE_INTERVAL: Duration = Duration::from_secs(60);
 const LIVENESS_PROVE_WAIT_TIMEOUT: Duration = Duration::from_secs(3);
 const LIVENESS_PROVE_MAX_RETRIES: u8 = 5;
 // Grace period after session resume or soft_restart to let the webview finish reloading.
@@ -39,7 +39,7 @@ const LIVENESS_RELOAD_GRACE_PERIOD: Duration = Duration::from_secs(10);
 // memory pressure to their renderer and the JS heap balloons unchecked. Simulating it
 // periodically forces WebView2 to actually release freed pages back to the OS.
 // WebView2 can reclaim freed pages periodically without a frequent timer wake-up.
-const MEMORY_PRESSURE_INTERVAL: Duration = Duration::from_secs(60);
+const MEMORY_PRESSURE_INTERVAL: Duration = Duration::from_secs(300);
 
 pub struct WidgetDeployment {
     pub definition: Arc<Widget>,
@@ -299,6 +299,7 @@ impl WidgetPod {
         let live = self.live.clone();
         let label = self.label.clone();
         let retries = self.retries.clone();
+        let native_window = self.window.as_ref().map(|window| window.0.clone());
 
         let handle = get_tokio_handle().spawn(async move {
             let app = get_app_handle();
@@ -316,6 +317,16 @@ impl WidgetPod {
                     was_suspended = false;
                     retries.store(0, std::sync::atomic::Ordering::SeqCst);
                     tokio::time::sleep(LIVENESS_RELOAD_GRACE_PERIOD).await;
+                    continue;
+                }
+
+                // Hidden widgets are intentionally throttled by WebView2 and do not need
+                // periodic renderer pings. Their native window-destroy callback still
+                // handles teardown; the next visible interval resumes the liveness check.
+                if native_window
+                    .as_ref()
+                    .is_some_and(|window| !window.is_visible().unwrap_or(true))
+                {
                     continue;
                 }
 
