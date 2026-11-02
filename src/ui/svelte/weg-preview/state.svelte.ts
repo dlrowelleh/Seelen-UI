@@ -5,7 +5,9 @@ import { lazyRune } from "libs/ui/svelte/utils";
 const interactables = lazyRune<UserAppWindow[]>(() => invoke(SeelenCommand.GetUserAppWindows));
 subscribe(SeelenEvent.UserAppWindowsChanged, interactables.setByPayload);
 
-const previews = lazyRune<Record<number, { data: string }>>(() => invoke(SeelenCommand.GetUserAppWindowsPreviews));
+const previews = lazyRune<Record<number, { data: string }>>(() =>
+  invoke(SeelenCommand.GetUserAppWindowsPreviews),
+);
 subscribe(SeelenEvent.UserAppWindowsPreviewsChanged, previews.setByPayload);
 
 await interactables.init();
