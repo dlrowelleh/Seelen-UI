@@ -118,7 +118,9 @@ fn schedule_deployment_reconcile() {
                 if std::panic::catch_unwind(std::panic::AssertUnwindSafe(reconcile_deployments))
                     .is_err()
                 {
-                    log::error!("Widget deployment reconciliation panicked; future requests will retry");
+                    log::error!(
+                        "Widget deployment reconciliation panicked; future requests will retry"
+                    );
                 }
                 continue;
             }
