@@ -95,7 +95,10 @@ impl WinPreviewManager {
         // maximized window. Capture that one on startup, then refresh it on focus/title/
         // geometry changes. Full screenshots for every app remain on-demand.
         let foreground = Window::get_foregrounded();
-        if foreground.is_maximized() && UserAppsManager::instance().contains_win(&foreground) {
+        if crate::state::application::FULL_STATE.load().is_weg_enabled()
+            && foreground.is_maximized()
+            && UserAppsManager::instance().contains_win(&foreground)
+        {
             self.enqueue_capture(foreground.address());
         }
 
@@ -114,6 +117,10 @@ impl WinPreviewManager {
         // Keep only the active maximized window's edge colors current for the dock.
         // Task-switcher/dock-preview sessions explicitly request complete snapshots.
         HookManager::subscribe(|(event, origin)| {
+            if !crate::state::application::FULL_STATE.load().is_weg_enabled() {
+                return;
+            }
+
             let window = match event {
                 WinEvent::SystemForeground => Window::get_foregrounded(),
                 WinEvent::ObjectNameChange | WinEvent::SynDebouncedRectChange
