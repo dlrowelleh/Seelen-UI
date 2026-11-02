@@ -75,7 +75,16 @@ impl SeelenUI {
         });
 
         crate::measure!("RESOURCES", RESOURCES.initialize().await);
-        crate::measure!("START_MENU", StartMenuManager::initialize().log_error());
+
+        // Start-menu enumeration performs shell and WinRT work across the installed app set.
+        // Keep it off the startup path; GetStartMenuItems returns the cached snapshot and the
+        // manager emits ItemsRefreshed once the background index is ready.
+        std::thread::Builder::new()
+            .name("StartMenuIndex".into())
+            .spawn(|| {
+                crate::measure!("START_MENU", StartMenuManager::initialize().log_error());
+            })?;
+
         crate::measure!("APP SETTINGS", FULL_STATE.load());
 
         if !webview_check.await.unwrap_or(false) {
