@@ -1,7 +1,7 @@
 import { invoke, SeelenCommand } from "@seelen-ui/lib";
 import { debounce } from "lodash";
 import z from "zod";
-import { focusedWinId, previews, settings, widget, windows } from "./getters.svelte.ts";
+import { focusedWinId, previews, refreshPreviews, settings, widget, windows } from "./getters.svelte.ts";
 import { monitors } from "libs/ui/svelte/runes/monitors.svelte.ts";
 
 export { focusedWinId, previews, settings, widget, windows };
@@ -199,6 +199,10 @@ widget.onTrigger((payload) => {
     void previews.init().catch((error) => {
       previewsRequested = false;
       console.error("Failed to load task-switcher previews:", error);
+    });
+  } else {
+    void refreshPreviews().catch((error) => {
+      console.error("Failed to refresh task-switcher previews:", error);
     });
   }
 
