@@ -1,10 +1,13 @@
 # Seelen UI low-memory validation
 
-This workflow measures the effect of the low-memory WebView2 profile. It does not assume that a smaller working set means lower total committed memory; compare both **Working Set** and **Private Memory**.
+This workflow measures the effect of the low-memory WebView2 profile. It does
+  not assume that a smaller working set means lower total committed memory;
+  compare both **Working Set** and **Private Memory**.
 
 ## Build
 
-The `Low-memory Windows setup build` workflow builds the x64 NSIS setup installer and uploads it as `seelen-ui-low-memory-setup-x64`.
+The `Low-memory Windows setup build` workflow builds the x64 NSIS setup
+  installer and uploads it as `seelen-ui-low-memory-setup-x64`.
 
 ## Repeatable idle measurement
 
@@ -31,11 +34,15 @@ The `Low-memory Windows setup build` workflow builds the x64 NSIS setup installe
 - Third-party widget hidden but intentionally running background work.
 - Restore after sleep / interactive-session resume.
 
-Record startup-to-interactive latency and whether any widget loses state or stops background work.
+Record startup-to-interactive latency and whether any widget loses state or
+  stops background work.
 
 ## GPU measurement
 
-Use Task Manager > Details and add the **GPU** and **GPU engine** columns. Record the Seelen UI and WebView2 process GPU engine usage under the same scenarios. GPU engine percentages are not additive across different engines and should be reported separately.
+Use Task Manager > Details and add the **GPU** and **GPU engine** columns.
+  Record the Seelen UI and WebView2 process GPU engine usage under the same
+  scenarios. GPU engine percentages are not additive across different engines
+  and should be reported separately.
 
 ## Interpretation
 
@@ -48,4 +55,9 @@ Use Task Manager > Details and add the **GPU** and **GPU engine** columns. Recor
 
 ## Known scope
 
-This change keeps WebView2 and Tauri. It does not claim zero-memory operation: visible widgets necessarily retain a renderer and GPU/window resources. Destruction/recreation of hidden widget windows is not enabled because the current widget deployment lifecycle automatically reconciles destroyed windows; implementing eviction safely requires a persistent pod state and restoration contract.
+This change keeps WebView2 and Tauri. It does not claim zero-memory operation:
+  visible widgets necessarily retain a renderer and GPU/window resources.
+  Destruction/recreation of hidden widget windows is not enabled because the
+  current widget deployment lifecycle automatically reconciles destroyed
+  windows; implementing eviction safely requires a persistent pod state and
+  restoration contract.
