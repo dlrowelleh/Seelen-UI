@@ -13,7 +13,9 @@ use crate::{
     hook::register_win_hook,
     migrations::Migrations,
     modules::{
-        clipboard::infrastructure::init_clipboard_manager, start::application::StartMenuManager,
+        apps::application::UserAppsManager,
+        clipboard::infrastructure::init_clipboard_manager,
+        start::application::StartMenuManager,
         user::infrastructure::reemit_user,
     },
     resources::RESOURCES,
@@ -117,6 +119,17 @@ impl SeelenUI {
         WIDGET_MANAGER.reconcile()?;
         create_background_window()?;
         register_win_hook()?;
+
+        // The first Alt+Tab request otherwise triggers a full synchronous Win32 window
+        // enumeration and process/AppUserModelID resolution on the hotkey path. Warm the
+        // window cache and WinEvent subscriptions in the background when the switcher is enabled.
+        if state.is_widget_enabled(&"@seelen/task-switcher".into()) {
+            std::thread::Builder::new()
+                .name("UserAppWindowsWarmup".into())
+                .spawn(|| {
+                    let _ = UserAppsManager::instance();
+                })?;
+        }
 
         std::thread::spawn(init_clipboard_manager);
 
