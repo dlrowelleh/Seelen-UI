@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke, SeelenCommand } from "@seelen-ui/lib";
+  import { onMount } from "svelte";
   import { Icon, MissingIcon } from "libs/ui/svelte/components/Icon/index.ts";
   import { windowsState, previews } from "../../state/windows.svelte.ts";
 
@@ -10,7 +11,13 @@
 
   let { title, hwnd }: Props = $props();
 
-  const preview = $derived(previews.value[hwnd]);
+  const preview = $derived(previews.isInitialized() ? previews.value[hwnd] : undefined);
+
+  onMount(() => {
+    void previews.init().catch((error) => {
+      console.error("Failed to load dock window previews:", error);
+    });
+  });
 
   function onClick() {
     invoke(SeelenCommand.WegToggleWindowState, {
