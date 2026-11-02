@@ -319,7 +319,7 @@ pub struct WebviewArgs {
 
 impl WebviewArgs {
     const BASE_ARGS: &[&str] = &[
-        "--disable-features=translate,msWebOOUI,msPdfOOUI,msSmartScreenProtection,RendererAppContainer,BackForwardCache,InterestCohort,SharedArrayBuffer,CalculateNativeWinOcclusion,OptimizationHints,AutofillServerCommunication,PaintHolding",
+        "--disable-features=translate,msWebOOUI,msPdfOOUI,msSmartScreenProtection,RendererAppContainer,BackForwardCache,InterestCohort,SharedArrayBuffer,OptimizationHints,AutofillServerCommunication,PaintHolding",
         "--no-first-run",
         "--disable-site-isolation-trials",
         "--disk-cache-size=0",
