@@ -19,6 +19,11 @@ subscribe(SeelenEvent.UserAppWindowsChanged, ({ payload }) => {
 export const previews = lazyRune(() => invoke(SeelenCommand.GetUserAppWindowsPreviews));
 subscribe(SeelenEvent.UserAppWindowsPreviewsChanged, previews.setByPayload);
 
+export async function refreshPreviews(): Promise<void> {
+  const snapshot = await invoke(SeelenCommand.GetUserAppWindowsPreviews);
+  previews.value = snapshot;
+}
+
 export const focusedWinId = lazyRune(async () => (await invoke(SeelenCommand.GetFocusedApp)).hwnd);
 subscribe(SeelenEvent.GlobalFocusChanged, (e) => {
   focusedWinId.value = e.payload.hwnd;
