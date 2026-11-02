@@ -18,8 +18,8 @@ use windows::Win32::{
             EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_PARENTCHANGE,
             EVENT_OBJECT_SHOW, EVENT_OBJECT_STATECHANGE, EVENT_OBJECT_UNCLOAKED,
             EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZESTART,
-            EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZESTART, GetMessageW, MSG,
-            OBJID_WINDOW, TranslateMessage,
+            EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZESTART, GetMessageW, MSG, OBJID_WINDOW,
+            TranslateMessage,
         },
     },
 };
@@ -127,7 +127,9 @@ impl HookManager {
                     0,
                 );
                 if hook.is_invalid() {
-                    log::error!("Failed to register WinEvent hook for {event_min:#x}..={event_max:#x}");
+                    log::error!(
+                        "Failed to register WinEvent hook for {event_min:#x}..={event_max:#x}"
+                    );
                 }
             }
 
