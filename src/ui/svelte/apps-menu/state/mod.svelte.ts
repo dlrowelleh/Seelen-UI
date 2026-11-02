@@ -3,7 +3,6 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import type { StartMenuItem, StartMenuLayoutItem, SystemSettingEntry } from "@seelen-ui/lib/types";
 import { lazyRune, persistentRune } from "libs/ui/svelte/utils";
 import { StartDisplayMode, StartView } from "../constants";
-import { foldersAsStartMenuItems } from "./knownFolders.svelte";
 
 import { locale } from "../i18n/index.ts";
 
@@ -272,8 +271,7 @@ function verifyPinnedItems() {
   // The background Start-menu index may still be loading. Do not prune native favorites
   // against the intentionally empty first snapshot; ItemsRefreshed will rerun this effect.
   if (items.length === 0) return;
-  const folderItems = foldersAsStartMenuItems.value;
-  const validIds = new Set([...items, ...folderItems].map(getItemId));
+  const validIds = new Set(items.map(getItemId));
 
   // Path-based items (manually pinned arbitrary files) are always kept.
   function isValid(id: string): boolean {
@@ -362,8 +360,6 @@ class State {
     const fromStart = this.allItems.find((item) => getItemId(item) === id);
     if (fromStart) return fromStart;
 
-    const fromFolders = foldersAsStartMenuItems.value.find((item) => getItemId(item) === id);
-    if (fromFolders) return fromFolders;
 
     // Synthesize an item for arbitrary path-based pins (e.g. pinned from dock)
     if (id.includes("\\") || id.includes("/")) {
