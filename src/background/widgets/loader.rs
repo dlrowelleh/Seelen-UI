@@ -35,10 +35,8 @@ const LIVENESS_PROVE_WAIT_TIMEOUT: Duration = Duration::from_secs(3);
 const LIVENESS_PROVE_MAX_RETRIES: u8 = 5;
 // Grace period after session resume or soft_restart to let the webview finish reloading.
 const LIVENESS_RELOAD_GRACE_PERIOD: Duration = Duration::from_secs(10);
-// Widgets sit occluded/background almost all the time, so the OS never signals real
-// memory pressure to their renderer and the JS heap balloons unchecked. Simulating it
-// periodically forces WebView2 to actually release freed pages back to the OS.
-// WebView2 can reclaim freed pages periodically without a frequent timer wake-up.
+// Hidden internal widgets are suspended after a short grace period. Third-party widgets
+// are excluded because they may intentionally perform background work.
 const HIDDEN_WEBVIEW_SUSPEND_CHECK_INTERVAL: Duration = Duration::from_secs(15);\nconst HIDDEN_WEBVIEW_SUSPEND_GRACE_PERIOD: Duration = Duration::from_secs(20);
 
 pub struct WidgetDeployment {
@@ -325,6 +323,7 @@ impl WidgetPod {
         let live = self.live.clone();
         let label = self.label.clone();
         let retries = self.retries.clone();
+        let native_window = self.window.as_ref().map(|window| window.0.clone());
 
         let handle = get_tokio_handle().spawn(async move {
             let app = get_app_handle();
