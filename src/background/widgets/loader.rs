@@ -37,7 +37,8 @@ const LIVENESS_PROVE_MAX_RETRIES: u8 = 5;
 const LIVENESS_RELOAD_GRACE_PERIOD: Duration = Duration::from_secs(10);
 // Hidden internal widgets are suspended after a short grace period. Third-party widgets
 // are excluded because they may intentionally perform background work.
-const HIDDEN_WEBVIEW_SUSPEND_CHECK_INTERVAL: Duration = Duration::from_secs(15);\nconst HIDDEN_WEBVIEW_SUSPEND_GRACE_PERIOD: Duration = Duration::from_secs(20);
+const HIDDEN_WEBVIEW_SUSPEND_CHECK_INTERVAL: Duration = Duration::from_secs(15);
+const HIDDEN_WEBVIEW_SUSPEND_GRACE_PERIOD: Duration = Duration::from_secs(20);
 
 pub struct WidgetDeployment {
     pub definition: Arc<Widget>,
