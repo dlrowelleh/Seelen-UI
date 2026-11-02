@@ -27,7 +27,10 @@ subscribe(SeelenEvent.GlobalFocusChanged, (e) => {
 await Promise.all([
   settings.init(),
   windows.init(),
-  previews.init(),
   focusedWinId.init(),
   monitors.init(),
 ]);
+
+// Window previews require screenshot capture, image encoding and a large base64 payload.
+// Do not block the first Alt+Tab frame on them; thumbnails fill in asynchronously.
+void previews.init();
