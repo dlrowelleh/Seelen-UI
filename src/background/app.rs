@@ -142,6 +142,7 @@ impl SeelenUI {
 
         if state.is_weg_enabled() {
             SeelenWeg::hide_native_taskbar();
+            UserAppsManager::init_taskbar_tracking();
         }
 
         WIDGET_MANAGER.reconcile()?;
@@ -192,6 +193,7 @@ impl SeelenUI {
 
         if state.is_weg_enabled() {
             SeelenWeg::hide_native_taskbar();
+            UserAppsManager::init_taskbar_tracking();
         } else {
             SeelenWeg::restore_native_taskbar()?;
         }
