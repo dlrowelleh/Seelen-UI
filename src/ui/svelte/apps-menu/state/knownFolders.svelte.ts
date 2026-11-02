@@ -68,13 +68,15 @@ function pathAsItem(path: string): StartMenuItem {
 }
 
 const _foldersAsStartMenuItems = $derived.by(() => {
+  // LazyRune initialization is reactive, so the derived list fills in once the
+  // requested folder results arrive without blocking the menu or throwing early.
   return [
-    desktop.value.map(pathAsItem),
-    downloads.value.map(pathAsItem),
-    documents.value.map(pathAsItem),
-    music.value.map(pathAsItem),
-    pictures.value.map(pathAsItem),
-    videos.value.map(pathAsItem),
+    desktop.isInitialized() ? desktop.value.map(pathAsItem) : [],
+    downloads.isInitialized() ? downloads.value.map(pathAsItem) : [],
+    documents.isInitialized() ? documents.value.map(pathAsItem) : [],
+    music.isInitialized() ? music.value.map(pathAsItem) : [],
+    pictures.isInitialized() ? pictures.value.map(pathAsItem) : [],
+    videos.isInitialized() ? videos.value.map(pathAsItem) : [],
   ].flat();
 });
 
