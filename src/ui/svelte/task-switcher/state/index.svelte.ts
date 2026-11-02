@@ -177,14 +177,6 @@ function onAltKeyUp() {
 }
 
 widget.onTrigger((payload) => {
-  if (!previewsRequested) {
-    previewsRequested = true;
-    void previews.init().catch((error) => {
-      previewsRequested = false;
-      console.error("Failed to load task-switcher previews:", error);
-    });
-  }
-
   const direction: string = (payload.customArgs?.direction as string) || "next";
   const autoConfirmValue: boolean = (payload.customArgs?.autoConfirm as boolean) || false;
 
@@ -200,6 +192,14 @@ widget.onTrigger((payload) => {
   const targetWindows = filteredWindows;
   if (targetWindows.length === 0) {
     return;
+  }
+
+  if (!previewsRequested) {
+    previewsRequested = true;
+    void previews.init().catch((error) => {
+      previewsRequested = false;
+      console.error("Failed to load task-switcher previews:", error);
+    });
   }
 
   // Use the currently selected window when already showing, otherwise start from focused
