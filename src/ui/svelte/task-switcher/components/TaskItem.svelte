@@ -104,7 +104,13 @@
   </div>
   <div class="task-preview-container">
     {#if preview}
-      <img class="task-preview" src={`data:image/webp;base64,${preview.data}`} alt="" loading="lazy" decoding="async" />
+      <img
+        class="task-preview"
+        src={`data:image/webp;base64,${preview.data}`}
+        alt=""
+        loading="lazy"
+        decoding="async"
+      />
     {:else}
       <MissingIcon class="task-no-preview" />
     {/if}
