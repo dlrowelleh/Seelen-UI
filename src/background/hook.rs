@@ -218,7 +218,7 @@ pub fn init_zombie_window_killer() {
             .log_error();
 
         loop {
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            std::thread::sleep(std::time::Duration::from_secs(10));
 
             // Pause when session is not interactive to reduce CPU usage
             if !IS_INTERACTIVE_SESSION.load(Ordering::Acquire) {
