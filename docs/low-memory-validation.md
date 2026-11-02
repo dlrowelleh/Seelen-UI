@@ -15,7 +15,7 @@ installer and uploads it as `seelen-ui-low-memory-setup-x64`.
 2. Close unrelated Edge windows and applications that embed WebView2.
 3. Install and launch the same Seelen UI build for each run.
 4. Keep the same widgets enabled, same monitor layout, same
-hardware-acceleration setting, and same power mode.
+   hardware-acceleration setting, and same power mode.
 5. Wait two minutes after startup.
 6. Run from the repository root:
 
@@ -24,10 +24,10 @@ hardware-acceleration setting, and same power mode.
    ```
 
 7. Repeat after the desktop has been idle for at least one minute. Save a
-separate CSV.
+   separate CSV.
 8. Compare average and peak Working Set and Private Memory by process. Sum the
-rows for `seelen-ui`, `slu`, `slu-service`, and the Seelen-owned
-`msedgewebview2` processes. Exclude unrelated WebView2 processes.
+   rows for `seelen-ui`, `slu`, `slu-service`, and the Seelen-owned
+   `msedgewebview2` processes. Exclude unrelated WebView2 processes.
 
 ## Scenarios to test
 
@@ -52,14 +52,14 @@ and should be reported separately.
 
 - WebView2 `TrySuspend` is best-effort. A renderer may decline suspension.
 - The low memory target is also best-effort and may page inactive memory to
-disk. A widget may briefly respond more slowly after becoming active.
+  disk. A widget may briefly respond more slowly after becoming active.
 - Internal widgets are eligible for suspension because they are owned by Seelen.
 - Third-party widgets are not suspended: they receive the low-memory target so
-timers, audio, and network activity can continue.
+  timers, audio, and network activity can continue.
 - Do not compare a run with hardware acceleration enabled to one with it
-disabled and attribute all differences to WebView lifecycle changes.
+  disabled and attribute all differences to WebView lifecycle changes.
 - Do not use a single Task Manager number as the total: WebView2 splits work
-across browser, renderer, GPU, and utility processes.
+  across browser, renderer, GPU, and utility processes.
 
 ## Known scope
 
