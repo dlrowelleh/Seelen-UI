@@ -1,7 +1,7 @@
 import { getRootContainer } from "libs/ui/react/utils/index.ts";
 import { mount } from "svelte";
 import App from "./App.svelte";
-import { Widget, SeelenEvent, subscribe } from "@seelen-ui/lib";
+import { SeelenEvent, subscribe, Widget } from "@seelen-ui/lib";
 import { onTriggered } from "./state/positioning.svelte.ts";
 
 import "@seelen-ui/lib/styles/reset.css";
