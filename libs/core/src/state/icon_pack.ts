@@ -22,6 +22,7 @@ interface IconPackLookupIndex {
   uniqueByUmid: Map<string, UniqueIconEntry>;
   uniqueByPath: Map<string, UniqueIconEntry>;
   uniqueByFilename: Map<string, UniqueIconEntry>;
+  uniqueOrder: Map<UniqueIconEntry, number>;
   sharedByExtension: Map<string, SharedIconEntry>;
   customByKey: Map<string, CustomIconEntry>;
 }
@@ -100,15 +101,17 @@ export class IconPackManager {
         uniqueByUmid: new Map(),
         uniqueByPath: new Map(),
         uniqueByFilename: new Map(),
+        uniqueOrder: new Map(),
         sharedByExtension: new Map(),
         customByKey: new Map(),
       };
 
       // Keep the first entry for each key: entries are ordered by preference inside
       // a pack, just as Array.find() was before this index was introduced.
-      for (const entry of pack.entries) {
+      for (const [order, entry] of pack.entries.entries()) {
         switch (entry.type) {
           case "unique": {
+            index.uniqueOrder.set(entry, order);
             if (entry.umid && !index.uniqueByUmid.has(entry.umid)) {
               index.uniqueByUmid.set(entry.umid, entry);
             }
@@ -250,9 +253,9 @@ export class IconPackManager {
       __seen.add(lowerPath);
     }
 
-    // Preserve pack priority exactly: for each pack, UMID is checked first, then exact
-    // path, then executable filename. A higher-priority pack's path entry still wins over
-    // a lower-priority pack's UMID entry, matching the previous ordered Array.find loops.
+    // Preserve pack priority exactly: each pack checks UMID first. When there is no
+    // UMID hit, exact-path and executable-filename matches compete by their original
+    // entry order, exactly as the former Array.find predicate did.
     for (const index of this.activeIconIndices) {
       let entry: UniqueIconEntry | undefined;
 
@@ -261,13 +264,22 @@ export class IconPackManager {
       }
 
       if (!entry && lowerPath) {
-        entry = index.uniqueByPath.get(lowerPath);
+        const exactPathEntry = index.uniqueByPath.get(lowerPath);
+        let filenameEntry: UniqueIconEntry | undefined;
 
-        if (!entry && extension === "exe") {
+        if (extension === "exe") {
           const filename = lowerPath.split("\\").pop();
           if (filename) {
-            entry = index.uniqueByFilename.get(filename);
+            filenameEntry = index.uniqueByFilename.get(filename);
           }
+        }
+
+        if (exactPathEntry && filenameEntry) {
+          const exactOrder = index.uniqueOrder.get(exactPathEntry) ?? Number.MAX_SAFE_INTEGER;
+          const filenameOrder = index.uniqueOrder.get(filenameEntry) ?? Number.MAX_SAFE_INTEGER;
+          entry = exactOrder <= filenameOrder ? exactPathEntry : filenameEntry;
+        } else {
+          entry = exactPathEntry ?? filenameEntry;
         }
       }
 
