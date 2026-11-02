@@ -5,9 +5,7 @@ import { lazyRune } from "libs/ui/svelte/utils";
 const interactables = lazyRune<UserAppWindow[]>(() => invoke(SeelenCommand.GetUserAppWindows));
 subscribe(SeelenEvent.UserAppWindowsChanged, interactables.setByPayload);
 
-const previews = lazyRune<Record<number, { data: string }>>(() =>
-  invoke(SeelenCommand.GetUserAppWindowsPreviews),
-);
+const previews = lazyRune<Record<number, { data: string }>>(() => invoke(SeelenCommand.GetUserAppWindowsPreviews));
 subscribe(SeelenEvent.UserAppWindowsPreviewsChanged, previews.setByPayload);
 
 await interactables.init();
@@ -23,8 +21,8 @@ Widget.self.onTrigger(({ customArgs }) => {
   // then explicitly refresh the cache on subsequent openings.
   const refresh = previews.isInitialized()
     ? invoke(SeelenCommand.GetUserAppWindowsPreviews).then((snapshot) => {
-        previews.value = snapshot;
-      })
+      previews.value = snapshot;
+    })
     : previews.init();
 
   void refresh.catch((error) => {
