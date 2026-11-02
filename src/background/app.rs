@@ -76,10 +76,10 @@ where
 {
     let guard = START_MENU_COM_THREAD
         .lock()
-        .map_err(|_| "Start-menu COM thread lock poisoned")?;
+        .map_err(|_| "Start-menu COM thread lock poisoned".to_string())?;
     let thread = guard
         .as_ref()
-        .ok_or("Start-menu COM thread is not initialized")?;
+        .ok_or_else(|| "Start-menu COM thread is not initialized".to_string())?;
     thread.execute(move |_| task())
 }
 
