@@ -362,7 +362,6 @@ class State {
     const fromStart = this.allItems.find((item) => getItemId(item) === id);
     if (fromStart) return fromStart;
 
-
     // Synthesize an item for arbitrary path-based pins (e.g. pinned from dock)
     if (id.includes("\\") || id.includes("/")) {
       return {
