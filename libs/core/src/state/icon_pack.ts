@@ -118,7 +118,7 @@ export class IconPackManager {
                 index.uniqueByPath.set(entry.path, entry);
               }
 
-              const filename = entry.path.split("\\\\").pop();
+              const filename = entry.path.split("\\").pop();
               if (filename && !index.uniqueByFilename.has(filename)) {
                 index.uniqueByFilename.set(filename, entry);
               }
@@ -234,7 +234,7 @@ export class IconPackManager {
 
     // Extract extension only when there is an actual dot after the last path separator.
     const lastDot = lowerPath?.lastIndexOf(".");
-    const lastSlash = lowerPath?.lastIndexOf("\\\\") ?? -1;
+    const lastSlash = lowerPath?.lastIndexOf("\\") ?? -1;
     const extension = lastDot !== undefined && lastDot > lastSlash
       ? lowerPath!.slice(lastDot + 1)
       : undefined;
@@ -258,7 +258,7 @@ export class IconPackManager {
         entry = index.uniqueByPath.get(lowerPath);
 
         if (!entry && extension === "exe") {
-          const filename = lowerPath.split("\\\\").pop();
+          const filename = lowerPath.split("\\").pop();
           if (filename) {
             entry = index.uniqueByFilename.get(filename);
           }
