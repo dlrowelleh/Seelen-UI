@@ -8,7 +8,7 @@ subscribe(SeelenEvent.UserAppWindowsChanged, interactables.setByPayload);
 const previews = lazyRune<Record<number, { data: string }>>(() => invoke(SeelenCommand.GetUserAppWindowsPreviews));
 subscribe(SeelenEvent.UserAppWindowsPreviewsChanged, previews.setByPayload);
 
-await Promise.all([interactables.init(), previews.init()]);
+await interactables.init();
 
 let hwnds = $state<number[]>([]);
 let position = $state<SeelenWegSide>(SeelenWegSide.Bottom);
@@ -17,15 +17,17 @@ Widget.self.onTrigger(({ customArgs }) => {
   hwnds = (customArgs?.hwnds as number[]) ?? [];
   position = (customArgs?.position as SeelenWegSide) ?? SeelenWegSide.Bottom;
 
-  // Refresh screenshots each time the preview popup is opened. The global preview
-  // manager no longer captures every window continuously while the popup is hidden.
-  void invoke(SeelenCommand.GetUserAppWindowsPreviews)
-    .then((snapshot) => {
-      previews.value = snapshot;
-    })
-    .catch((error) => {
-      console.error("Failed to refresh dock preview thumbnails:", error);
-    });
+  // The preview widget is lazy-created on its first opening. Initialize once there,
+  // then explicitly refresh the cache on subsequent openings.
+  const refresh = previews.isInitialized()
+    ? invoke(SeelenCommand.GetUserAppWindowsPreviews).then((snapshot) => {
+        previews.value = snapshot;
+      })
+    : previews.init();
+
+  void refresh.catch((error) => {
+    console.error("Failed to refresh dock preview thumbnails:", error);
+  });
 });
 
 const currentInteractables = $derived(interactables.value?.filter((w) => hwnds.includes(w.hwnd)) ?? []);
