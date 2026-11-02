@@ -153,7 +153,7 @@ $effect.root(() => {
           onAltKeyUp();
         }
         wasAltDown = isAltDown;
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 16));
       }
     };
     poll();
