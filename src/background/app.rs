@@ -82,7 +82,13 @@ impl SeelenUI {
         std::thread::Builder::new()
             .name("StartMenuIndex".into())
             .spawn(|| {
-                crate::measure!("START_MENU", StartMenuManager::initialize().log_error());
+                let result = crate::measure!(
+                    "START_MENU",
+                    Com::run_with_context(StartMenuManager::initialize)
+                );
+                if let Err(err) = result {
+                    log::error!("Failed to initialize Start Menu index: {err}");
+                }
             })?;
 
         crate::measure!("APP SETTINGS", FULL_STATE.load());
