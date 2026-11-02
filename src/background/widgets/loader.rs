@@ -39,7 +39,7 @@ const LIVENESS_RELOAD_GRACE_PERIOD: Duration = Duration::from_secs(10);
 // memory pressure to their renderer and the JS heap balloons unchecked. Simulating it
 // periodically forces WebView2 to actually release freed pages back to the OS.
 // WebView2 can reclaim freed pages periodically without a frequent timer wake-up.
-const MEMORY_PRESSURE_INTERVAL: Duration = Duration::from_secs(300);
+const MEMORY_PRESSURE_INTERVAL: Duration = Duration::from_secs(120);
 
 pub struct WidgetDeployment {
     pub definition: Arc<Widget>,
