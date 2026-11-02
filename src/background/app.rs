@@ -128,7 +128,7 @@ impl SeelenUI {
             .name("StartMenuIndex".into())
             .spawn(|| {
                 let result = ComThread::spawn("Start Menu COM", || {
-                    crate::measure!("START_MENU", StartMenuManager::initialize)?;
+                    crate::measure!("START_MENU", StartMenuManager::initialize())?;
                     Ok(())
                 });
 
