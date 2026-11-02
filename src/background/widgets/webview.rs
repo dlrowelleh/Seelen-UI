@@ -246,7 +246,7 @@ pub fn set_low_memory_target(webview: &tauri::WebviewWindow, low: bool) {
     use windows_core::Interface;
 
     webview
-        .with_webview(|platform_webview| {
+        .with_webview(move |platform_webview| {
             let core_webview = match unsafe { platform_webview.controller().CoreWebView2() } {
                 Ok(webview) => webview,
                 Err(err) => {
