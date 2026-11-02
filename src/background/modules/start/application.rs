@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
-use std::sync::{Arc, LazyLock, OnceLock, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    Arc, LazyLock, OnceLock,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 use notify_debouncer_full::{
