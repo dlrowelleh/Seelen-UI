@@ -151,7 +151,9 @@ impl SeelenUI {
         // Taskbar tracking uses the background window's shell-hook message pump, so it must
         // only be initialized after create_background_window() has completed.
         if state.is_weg_enabled() {
-            UserAppsManager::init_taskbar_tracking();
+            std::thread::Builder::new()
+                .name("TaskbarTracking".into())
+                .spawn(UserAppsManager::init_taskbar_tracking)?;
         }
 
         // The first Alt+Tab request otherwise triggers a full synchronous Win32 window
@@ -198,7 +200,9 @@ impl SeelenUI {
 
         if state.is_weg_enabled() {
             SeelenWeg::hide_native_taskbar();
-            UserAppsManager::init_taskbar_tracking();
+            std::thread::Builder::new()
+                .name("TaskbarTracking".into())
+                .spawn(UserAppsManager::init_taskbar_tracking)?;
         } else {
             SeelenWeg::restore_native_taskbar()?;
         }
