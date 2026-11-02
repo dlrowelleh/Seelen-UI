@@ -9,12 +9,13 @@ use win_screenshot::prelude::capture_window;
 use crate::{
     error::{Result, ResultLogExt},
     event_manager,
+    hook::HookManager,
     modules::apps::application::{USER_APPS_MANAGER, UserAppWinEvent, UserAppsManager},
     utils::lock_free::SyncHashMap,
     windows_api::{
         WindowsApi,
         event_window::IS_INTERACTIVE_SESSION,
-        window::Window,
+        window::{Window, event::WinEvent},
     },
 };
 
@@ -90,6 +91,14 @@ impl WinPreviewManager {
             self.register_window(hwnd);
         }
 
+        // The dock's maximized-window gradient only needs colors for the focused
+        // maximized window. Capture that one on startup, then refresh it on focus/title/
+        // geometry changes. Full screenshots for every app remain on-demand.
+        let foreground = Window::get_foregrounded();
+        if foreground.is_maximized() && UserAppsManager::instance().contains_win(&foreground) {
+            self.enqueue_capture(foreground.address());
+        }
+
         UserAppsManager::subscribe(|e| match e {
             UserAppWinEvent::Added(addr) => {
                 WINDOWS_PREVIEWS.register_window(addr);
@@ -102,8 +111,23 @@ impl WinPreviewManager {
             }
         });
 
-        // Preview capture is requested by the task switcher when it opens. Do not keep
-        // taking screenshots in the background between Alt+Tab sessions.
+        // Keep only the active maximized window's edge colors current for the dock.
+        // Task-switcher/dock-preview sessions explicitly request complete snapshots.
+        HookManager::subscribe(|(event, origin)| {
+            let window = match event {
+                WinEvent::SystemForeground => Window::get_foregrounded(),
+                WinEvent::ObjectNameChange | WinEvent::SynDebouncedRectChange
+                    if origin.is_focused() =>
+                {
+                    origin
+                }
+                _ => return,
+            };
+
+            if window.is_maximized() && USER_APPS_MANAGER.contains_win(&window) {
+                WINDOWS_PREVIEWS.enqueue_capture(window.address());
+            }
+        });
 
         Ok(())
     }
