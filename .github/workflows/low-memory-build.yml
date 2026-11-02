@@ -37,7 +37,11 @@ jobs:
       - name: Build hook DLL
         run: cargo build --release --locked --target x86_64-pc-windows-msvc -p sluhk
 
-      - name: Build Seelen UI (no installer bundle)
+      - name: Build Seelen UI (unsigned CI artifact, no installer bundle)
+        # CI does not have the release signing key. This opt-in is explicitly supported
+        # by src/build.rs and is only for test artifacts; do not distribute as a signed release.
+        env:
+          SEELEN_ALLOW_UNSIGNED_BUILD: "1"
         run: npx tauri build --ci --verbose --no-bundle --target x86_64-pc-windows-msvc
 
       - name: Upload Windows build artifacts
