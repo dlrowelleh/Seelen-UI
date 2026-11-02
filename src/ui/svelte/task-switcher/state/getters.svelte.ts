@@ -33,4 +33,6 @@ await Promise.all([
 
 // Window previews require screenshot capture, image encoding and a large base64 payload.
 // Do not block the first Alt+Tab frame on them; thumbnails fill in asynchronously.
-void previews.init();
+void previews.init().catch((error) => {
+  console.error("Failed to load task-switcher previews:", error);
+});
