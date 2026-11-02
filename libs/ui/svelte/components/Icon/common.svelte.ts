@@ -2,20 +2,33 @@ import { IconPackManager } from "@seelen-ui/lib";
 import type { Icon } from "@seelen-ui/lib/types";
 import { prefersDarkColorScheme } from "../../runes/DarkMode.svelte";
 
-const manager = await IconPackManager.create();
-
-let innerState = $state.raw({
+let innerState = $state.raw<{
+  _version: number;
+  value: IconPackManager | null;
+}>({
   _version: 0,
-  value: manager,
+  value: null,
 });
 
-manager.onChange(() => {
-  // trick to make svelte re-render
-  innerState = {
-    _version: iconPackManager._version + 1,
-    value: manager,
-  };
-});
+// Do not make every FileIcon consumer wait for the icon pack and settings IPC calls.
+// Widgets can render their fallback immediately and update when the manager is ready.
+void IconPackManager.create()
+  .then((manager) => {
+    innerState = {
+      _version: innerState._version + 1,
+      value: manager,
+    };
+
+    return manager.onChange(() => {
+      innerState = {
+        _version: innerState._version + 1,
+        value: manager,
+      };
+    });
+  })
+  .catch((error) => {
+    console.error("Failed to initialize icon pack manager:", error);
+  });
 
 export interface IconState {
   src: string | null;
@@ -24,21 +37,26 @@ export interface IconState {
 }
 
 class IconPackManagerWrap {
-  get value() {
-    return innerState.value;
+  get isReady(): boolean {
+    return innerState.value !== null;
   }
 
   get _version() {
     return innerState._version;
   }
 
-  resolve(icon: Icon): IconState {
-    return {
-      src: (prefersDarkColorScheme.value ? icon.dark : icon.light) || icon.base,
-      mask: icon.mask,
-      isAproximatelySquare: icon.isAproximatelySquare,
-    };
+  getIcon(args: { path?: string | null; umid?: string | null }): Icon | null {
+    return innerState.value?.getIcon(args) ?? null;
+  }
+
+  getCustomIcon(name: string): Icon | null {
+    return innerState.value?.getCustomIcon(name) ?? null;
+  }
+
+  getMissingIcon(): Icon | null {
+    return innerState.value?.getMissingIcon() ?? null;
   }
 }
 
 export const iconPackManager = new IconPackManagerWrap();
+
