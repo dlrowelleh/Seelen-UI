@@ -337,24 +337,30 @@ impl StartMenuManager {
         Self::reload_shortcuts();
     }
 
+    fn schedule_packaged_reload() {
+        // Package deployment may emit several events in a burst. Delay once off-apartment,
+        // then queue the WinRT scan back onto the owning STA instead of using COM unsafely.
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(1000));
+            crate::app::execute_start_menu_com_task(|| {
+                Self::reload_packaged().log_error();
+            })
+            .log_error();
+        });
+    }
+
     fn setup_package_catalog_listener(&self) -> Result<()> {
         let catalog = PackageCatalog::OpenForCurrentUser()?;
 
         catalog.PackageInstalling(&TypedEventHandler::new(|_catalog, _args| {
             log::debug!("Package installing event detected");
-            std::thread::spawn(|| {
-                std::thread::sleep(Duration::from_millis(1000));
-                Self::reload_packaged().log_error();
-            });
+            Self::schedule_packaged_reload();
             Ok(())
         }))?;
 
         catalog.PackageUninstalling(&TypedEventHandler::new(|_catalog, _args| {
             log::debug!("Package uninstalling event detected");
-            std::thread::spawn(|| {
-                std::thread::sleep(Duration::from_millis(1000));
-                Self::reload_packaged().log_error();
-            });
+            Self::schedule_packaged_reload();
             Ok(())
         }))?;
 
