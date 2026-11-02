@@ -36,7 +36,7 @@ const LIVENESS_PROVE_MAX_RETRIES: u8 = 5;
 // Grace period after session resume or soft_restart to let the webview finish reloading.
 const LIVENESS_RELOAD_GRACE_PERIOD: Duration = Duration::from_secs(10);
 // Hidden internal widgets are suspended after a short grace period. Third-party widgets
-// are excluded because they may intentionally perform background work.
+// retain script execution and receive WebView2's low-memory target after the same grace period.
 const HIDDEN_WEBVIEW_SUSPEND_CHECK_INTERVAL: Duration = Duration::from_secs(15);
 const HIDDEN_WEBVIEW_SUSPEND_GRACE_PERIOD: Duration = Duration::from_secs(20);
 
