@@ -1,4 +1,7 @@
-use std::sync::{LazyLock, Mutex, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    LazyLock, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 use slu_ipc::messages::SvcAction;
 use tauri::{AppHandle, Emitter, Wry};
@@ -13,10 +16,8 @@ use crate::{
     hook::register_win_hook,
     migrations::Migrations,
     modules::{
-        apps::application::UserAppsManager,
-        clipboard::infrastructure::init_clipboard_manager,
-        start::application::StartMenuManager,
-        user::infrastructure::reemit_user,
+        apps::application::UserAppsManager, clipboard::infrastructure::init_clipboard_manager,
+        start::application::StartMenuManager, user::infrastructure::reemit_user,
     },
     resources::RESOURCES,
     session::infrastructure::reemit_session,
@@ -133,8 +134,9 @@ impl SeelenUI {
 
                 match result {
                     Ok(thread) => {
-                        *START_MENU_COM_THREAD.lock().expect("start menu COM lock poisoned") =
-                            Some(thread);
+                        *START_MENU_COM_THREAD
+                            .lock()
+                            .expect("start menu COM lock poisoned") = Some(thread);
                     }
                     Err(err) => {
                         log::error!("Failed to initialize Start Menu index: {err}");
@@ -178,7 +180,10 @@ impl SeelenUI {
         // The first Alt+Tab request otherwise triggers a full synchronous Win32 window
         // enumeration and process/AppUserModelID resolution on the hotkey path. Warm the
         // window cache and WinEvent subscriptions in the background when the switcher is enabled.
-        if state.settings.is_widget_enabled(&"@seelen/task-switcher".into()) {
+        if state
+            .settings
+            .is_widget_enabled(&"@seelen/task-switcher".into())
+        {
             std::thread::Builder::new()
                 .name("UserAppWindowsWarmup".into())
                 .spawn(|| {
