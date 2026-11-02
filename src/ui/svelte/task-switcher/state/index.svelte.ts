@@ -99,6 +99,9 @@ class State {
 
 export const globalState = new State();
 
+// Screenshots are expensive and only useful after the user opens Alt+Tab.
+let previewsRequested = false;
+
 // +++++++++++++++++++++++ Visibility +++++++++++++++++++++++
 
 $effect.root(() => {
@@ -174,6 +177,14 @@ function onAltKeyUp() {
 }
 
 widget.onTrigger((payload) => {
+  if (!previewsRequested) {
+    previewsRequested = true;
+    void previews.init().catch((error) => {
+      previewsRequested = false;
+      console.error("Failed to load task-switcher previews:", error);
+    });
+  }
+
   const direction: string = (payload.customArgs?.direction as string) || "next";
   const autoConfirmValue: boolean = (payload.customArgs?.autoConfirm as boolean) || false;
 
