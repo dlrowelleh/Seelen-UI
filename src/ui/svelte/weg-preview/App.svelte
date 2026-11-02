@@ -32,7 +32,9 @@
 <div class="weg-item-preview-container slu-std-popover">
   <div class="weg-item-preview-list">
     {#each previewState.currentInteractables as win (win.hwnd)}
-      {@const preview = previewState.previews.isInitialized() ? previewState.previews.value[win.hwnd] : undefined}
+      {@const preview = previewState.previews.isInitialized()
+        ? previewState.previews.value[win.hwnd]
+        : undefined}
       <div
         role="button"
         tabindex="0"
