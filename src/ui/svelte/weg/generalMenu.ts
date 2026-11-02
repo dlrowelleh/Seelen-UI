@@ -20,7 +20,7 @@ Widget.self.webview.listen<ContextMenuCallbackPayload>(onItemMenuClick, ({ paylo
     invoke(SeelenCommand.TrashBinEmpty);
   } else if (key === "edit_custom_icon") {
     const iconName = payload.value as string;
-    const entry = iconPackManager.value.getCustomIconEntry(iconName);
+    const entry = iconPackManager.getCustomIconEntry(iconName);
     invoke(SeelenCommand.TriggerWidget, {
       payload: {
         id: "@seelen/icon-editor" as WidgetId,

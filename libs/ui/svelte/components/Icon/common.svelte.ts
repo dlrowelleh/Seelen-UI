@@ -62,6 +62,14 @@ class IconPackManagerWrap {
     return innerState.value?.getIcon(args) ?? null;
   }
 
+  getIconEntry(args: { path?: string | null; umid?: string | null }) {
+    return innerState.value?.getIconEntry(args) ?? null;
+  }
+
+  getCustomIconEntry(name: string) {
+    return innerState.value?.getCustomIconEntry(name) ?? null;
+  }
+
   getCustomIcon(name: string): Icon | null {
     return innerState.value?.getCustomIcon(name) ?? null;
   }

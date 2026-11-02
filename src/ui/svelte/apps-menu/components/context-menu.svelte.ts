@@ -34,7 +34,7 @@ Widget.self.webview.listen<ContextMenuCallbackPayload>(
       Widget.self.hide();
       invoke(SeelenCommand.OpenFile, { path: "ms-settings:appsfeatures" });
     } else if (key === "edit_icon") {
-      const entry = iconPackManager.value.getIconEntry({
+      const entry = iconPackManager.getIconEntry({
         path: item.path,
         umid: item.umid ?? null,
       });

@@ -39,7 +39,7 @@ Widget.self.webview.listen(onAppMenuClick, ({ payload }) => {
   } else if (key === "kill") {
     windows.forEach((w) => invoke(SeelenCommand.WegKillApp, { hwnd: w.hwnd }));
   } else if (key === "edit_app_icon") {
-    const entry = iconPackManager.value.getIconEntry({ path: item.path, umid: item.umid });
+    const entry = iconPackManager.getIconEntry({ path: item.path, umid: item.umid });
     invoke(SeelenCommand.TriggerWidget, {
       payload: {
         id: "@seelen/icon-editor" as WidgetId,
@@ -80,7 +80,7 @@ export function getUserApplicationContextMenu(
     items.push({ type: "Separator" });
   }
 
-  const foundIcon = iconPackManager.value.getIcon({ path: item.path, umid: item.umid });
+  const foundIcon = iconPackManager.getIcon({ path: item.path, umid: item.umid });
   const iconSrc = (prefersDarkColorScheme.value ? foundIcon?.dark : foundIcon?.light) || foundIcon?.base;
 
   items.push(
