@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::sync::{LazyLock, Mutex, atomic::Ordering};
 
 use slu_ipc::messages::SvcAction;
 use tauri::{AppHandle, Emitter, Wry};
@@ -27,7 +27,7 @@ use crate::{
         weg::SeelenWeg,
     },
     windows_api::{
-        Com,
+        Com, ComThread,
         event_window::{IS_INTERACTIVE_SESSION, create_background_window},
     },
 };
@@ -63,6 +63,11 @@ where
 
 pub struct SeelenUI {}
 
+// PackageCatalog is a WinRT event source. Keep its owning STA apartment and message pump
+// alive for the lifetime of the app so install/uninstall notifications continue to arrive.
+static START_MENU_COM_THREAD: LazyLock<Mutex<Option<ComThread<()>>>> =
+    LazyLock::new(|| Mutex::new(None));
+
 /* ============== Methods ============== */
 impl SeelenUI {
     /// this fn prepares the app loading assets and settings in memory parallelly
@@ -80,16 +85,24 @@ impl SeelenUI {
 
         // Start-menu enumeration performs shell and WinRT work across the installed app set.
         // Keep it off the startup path; GetStartMenuItems returns the cached snapshot and the
-        // manager emits ItemsRefreshed once the background index is ready.
+        // manager emits ItemsRefreshed once the background index is ready. PackageCatalog also
+        // needs its STA message pump to remain alive for install/uninstall callbacks.
         std::thread::Builder::new()
             .name("StartMenuIndex".into())
             .spawn(|| {
-                let result = crate::measure!(
-                    "START_MENU",
-                    Com::run_with_context(StartMenuManager::initialize)
-                );
-                if let Err(err) = result {
-                    log::error!("Failed to initialize Start Menu index: {err}");
+                let result = ComThread::spawn("Start Menu COM", || {
+                    crate::measure!("START_MENU", StartMenuManager::initialize)?;
+                    Ok(())
+                });
+
+                match result {
+                    Ok(thread) => {
+                        *START_MENU_COM_THREAD.lock().expect("start menu COM lock poisoned") =
+                            Some(thread);
+                    }
+                    Err(err) => {
+                        log::error!("Failed to initialize Start Menu index: {err}");
+                    }
                 }
             })?;
 
