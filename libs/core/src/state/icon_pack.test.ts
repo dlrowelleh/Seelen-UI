@@ -239,6 +239,17 @@ Deno.test("IconPackManager", async (t) => {
       );
     });
 
+    await t.step("higher-priority pack path beats lower-priority pack UMID", () => {
+      const ctx = new IconPackManagerTestContext(["b", "a"]); // packA has higher priority
+      assertEquals(
+        ctx.instance.getIconPath({
+          path: "C:\\Windows\\explorer.exe",
+          umid: "MSEdge",
+        }),
+        onlyBase(`${A_PATH}\\${GOT_BY_PATH}`),
+      );
+    });
+
     await t.step(
       "should match by filename when higher priority pack has filename match",
       () => {
