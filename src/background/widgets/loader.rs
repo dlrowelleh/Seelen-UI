@@ -36,7 +36,7 @@ const LIVENESS_PROVE_MAX_RETRIES: u8 = 5;
 // Grace period after session resume or soft_restart to let the webview finish reloading.
 const LIVENESS_RELOAD_GRACE_PERIOD: Duration = Duration::from_secs(10);
 // Hidden internal widgets are suspended after a short grace period. Third-party widgets
-// are excluded because they may intentionally perform background work.
+// retain script execution and receive WebView2's low-memory target after the same grace period.
 const HIDDEN_WEBVIEW_SUSPEND_CHECK_INTERVAL: Duration = Duration::from_secs(15);
 const HIDDEN_WEBVIEW_SUSPEND_GRACE_PERIOD: Duration = Duration::from_secs(20);
 
@@ -271,10 +271,7 @@ impl WidgetPod {
         self.start_liveness_prove(suspend_when_hidden);
     }
 
-    fn start_hidden_webview_suspension(&mut self, enabled: bool) {
-        if !enabled {
-            return;
-        }
+    fn start_hidden_webview_suspension(&mut self, suspend_scripts: bool) {
         let Some(window) = &self.window else {
             return;
         };
@@ -285,27 +282,43 @@ impl WidgetPod {
 
         let handle = get_tokio_handle().spawn(async move {
             let mut hidden_since: Option<Instant> = None;
+            let mut low_memory_target_applied = false;
 
             loop {
                 tokio::time::sleep(HIDDEN_WEBVIEW_SUSPEND_CHECK_INTERVAL).await;
 
-                // A failed visibility query must be treated as visible. Suspending an
-                // uncertain window could break a widget that is currently on screen.
+                // A failed visibility query must be treated as visible. Never apply
+                // memory pressure to a window whose visibility cannot be determined.
                 let is_visible = native_window.is_visible().unwrap_or(true);
                 if is_visible {
                     hidden_since = None;
+                    if low_memory_target_applied {
+                        webview::set_low_memory_target(&webview, false);
+                        low_memory_target_applied = false;
+                    }
                     continue;
                 }
 
-                // Never suspend a widget while it is still mounting or initializing.
+                // Never change renderer state while a widget is mounting/initializing.
                 if !WIDGET_MANAGER.is_ready(&label) {
                     hidden_since = None;
                     continue;
                 }
 
                 let hidden_since = hidden_since.get_or_insert_with(Instant::now);
-                if hidden_since.elapsed() >= HIDDEN_WEBVIEW_SUSPEND_GRACE_PERIOD {
+                if hidden_since.elapsed() < HIDDEN_WEBVIEW_SUSPEND_GRACE_PERIOD {
+                    continue;
+                }
+
+                if suspend_scripts {
+                    // Internal widgets have no required background work. TrySuspend
+                    // pauses JS timers/animations and moves WebView2 to low memory.
                     webview::suspend_if_hidden(&webview);
+                } else if !low_memory_target_applied {
+                    // Third-party widgets may rely on timers, audio, or network work.
+                    // Keep scripts running but ask WebView2 to trim inactive memory.
+                    webview::set_low_memory_target(&webview, true);
+                    low_memory_target_applied = true;
                 }
             }
         });

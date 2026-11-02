@@ -1,0 +1,59 @@
+name: Low-memory Windows setup build
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "src/background/widgets/webview.rs"
+      - "src/background/widgets/loader.rs"
+      - "src/background/widgets/manager.rs"
+      - "src/**"
+      - "libs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/low-memory-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64-build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+        with:
+          rust-targets: x86_64-pc-windows-msvc
+          cache-key-prefix: low-memory-setup
+
+      - name: Install frontend dependencies and generate core library
+        run: npm install
+
+      - name: Build hook DLL
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc -p sluhk
+
+      - name: Build Seelen UI NSIS setup installer (unsigned test build)
+        # Tauri successfully creates the NSIS installer, then exits non-zero when it
+        # tries to sign updater artifacts because CI has no private signing key.
+        # Allow that post-bundle signing failure; the upload step below still fails
+        # the job if the actual setup installer was not produced.
+        continue-on-error: true
+        env:
+          SEELEN_ALLOW_UNSIGNED_BUILD: "1"
+        run: npx tauri build --ci --verbose --bundles nsis --target x86_64-pc-windows-msvc
+
+      - name: Upload Windows setup installer and binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: seelen-ui-low-memory-setup-x64
+          if-no-files-found: error
+          path: |
+            target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+            target/x86_64-pc-windows-msvc/release/*.exe
+            target/x86_64-pc-windows-msvc/release/*.dll
+            target/x86_64-pc-windows-msvc/release/static/**

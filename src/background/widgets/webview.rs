@@ -233,6 +233,54 @@ pub fn suspend_if_hidden(webview: &tauri::WebviewWindow) {
         .log_error();
 }
 
+/// Ask WebView2 to trim memory while an inactive widget must keep running scripts.
+///
+/// This is deliberately separate from TrySuspend: WebView2 documents these as
+/// alternative strategies. Internal widgets use TrySuspend (which pauses scripts),
+/// while third-party widgets retain background execution and use the low target.
+pub fn set_low_memory_target(webview: &tauri::WebviewWindow, low: bool) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        ICoreWebView2_19,
+    };
+    use windows_core::Interface;
+
+    webview
+        .with_webview(move |platform_webview| {
+            let core_webview = match unsafe { platform_webview.controller().CoreWebView2() } {
+                Ok(webview) => webview,
+                Err(err) => {
+                    log::debug!("Failed to get CoreWebView2 for memory target update: {err}");
+                    return;
+                }
+            };
+
+            let webview = match core_webview.cast::<ICoreWebView2_19>() {
+                Ok(webview) => webview,
+                Err(err) => {
+                    // Older Evergreen runtimes may not implement ICoreWebView2_19.
+                    log::debug!("WebView2 runtime does not support memory target levels: {err}");
+                    return;
+                }
+            };
+
+            let target = if low {
+                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+            } else {
+                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+            };
+            if let Err(err) = unsafe { webview.SetMemoryUsageTargetLevel(target) } {
+                log::debug!("Failed to update WebView2 memory target level: {err}");
+            } else {
+                log::trace!(
+                    "WebView2 memory target set to {}",
+                    if low { "low" } else { "normal" }
+                );
+            }
+        })
+        .log_error();
+}
+
 /// Resume a suspended WebView2 before dispatching an event to its JavaScript context.
 /// WebView2 also resumes automatically when made visible, but explicit resumption is
 /// needed for events dispatched while the widget is still hidden.
@@ -426,11 +474,12 @@ impl WebviewArgs {
         "--disable-software-rasterizer",
     ];
 
-    const UNSTABLE_OPTIMIZATIONS: &[&str] = &[
-        // this reduces ram usage but if a widget crashes it will crash
-        // all widgets with the same loader, so it's not worth it
-        "--process-per-site",
-    ];
+    // Share Chromium renderer processes between WebViews belonging to the same
+    // site. This materially reduces the per-widget process overhead. The trade-off
+    // is a larger crash domain: a renderer crash can affect multiple same-site widgets.
+    // This is enabled by default because Seelen's internal widgets are shipped as a
+    // small number of app origins and memory usage is a primary constraint.
+    const PROCESS_SHARING_ARGS: &[&str] = &["--process-per-site"];
 
     pub fn create(with_gpu: bool, unstable_optimizations: bool) -> Self {
         let mut args: Vec<String> = Self::BASE_ARGS.iter().map(|s| s.to_string()).collect();
@@ -441,9 +490,9 @@ impl WebviewArgs {
             args.extend(Self::PERFORMANCE_ARGS.iter().map(|s| s.to_string()));
         };
 
-        if unstable_optimizations {
-            args.extend(Self::UNSTABLE_OPTIMIZATIONS.iter().map(|s| s.to_string()));
-        }
+        // Unlike the former opt-in unstable flag, renderer sharing is now part
+        // of the default low-memory profile.
+        args.extend(Self::PROCESS_SHARING_ARGS.iter().map(|s| s.to_string()));
 
         Self {
             args,
