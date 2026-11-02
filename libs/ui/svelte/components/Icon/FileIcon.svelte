@@ -22,7 +22,7 @@
   let icon: IconState = $derived.by(() => {
     // Depend on _version to trigger reactivity when icon pack changes
     iconPackManager._version;
-    const icon = iconPackManager.value.getIcon({ path, umid });
+    const icon = iconPackManager.getIcon({ path, umid });
     if (icon) {
       return {
         src: (prefersDarkColorScheme.value ? icon.dark : icon.light) || icon.base,
@@ -36,6 +36,9 @@
 
   // Watch for src becoming null (trigger icon extraction)
   $effect(() => {
+    // Wait for the asynchronously initialized icon pack before issuing extraction IPC.
+    if (!iconPackManager.isReady) return;
+
     if (!mounted.value) {
       IconPackManager.requestIconExtraction({ path, umid });
       mounted.value = true;
