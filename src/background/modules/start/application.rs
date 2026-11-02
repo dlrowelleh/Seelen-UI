@@ -83,17 +83,11 @@ impl StartMenuManager {
     pub fn initialize() -> Result<()> {
         let manager = Self::instance();
         crate::measure!("StartMenu Shortcuts", manager.load_shortcuts());
-
-        // Publish Win32 shortcuts immediately; package enumeration can take noticeably
-        // longer and is not required to show the initial Start-menu list.
-        Self::send(StartMenuEvent::ItemsRefreshed);
-
         manager.packaged.replace(crate::measure!(
             "StartMenu Packaged",
             Self::load_packaged_items()?
         ));
         manager.setup_listeners();
-        // Publish the complete list once packaged apps are available as well.
         Self::send(StartMenuEvent::ItemsRefreshed);
         Ok(())
     }
