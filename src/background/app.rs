@@ -68,6 +68,21 @@ pub struct SeelenUI {}
 static START_MENU_COM_THREAD: LazyLock<Mutex<Option<ComThread<()>>>> =
     LazyLock::new(|| Mutex::new(None));
 
+/// Queue WinRT work on the long-lived Start-menu STA. PackageCatalog callbacks must never
+/// move WinRT operations to an arbitrary std::thread without initializing its COM apartment.
+pub(crate) fn execute_start_menu_com_task<F>(task: F) -> Result<()>
+where
+    F: FnOnce() + Send + 'static,
+{
+    let guard = START_MENU_COM_THREAD
+        .lock()
+        .map_err(|_| "Start-menu COM thread lock poisoned")?;
+    let thread = guard
+        .as_ref()
+        .ok_or("Start-menu COM thread is not initialized")?;
+    thread.execute(move |_| task())
+}
+
 /* ============== Methods ============== */
 impl SeelenUI {
     /// this fn prepares the app loading assets and settings in memory parallelly
