@@ -250,6 +250,22 @@ Deno.test("IconPackManager", async (t) => {
       );
     });
 
+    await t.step("earlier filename match beats later exact path in the same pack", () => {
+      const ctx = new IconPackManagerTestContext(["a"]);
+      ctx.instance.iconPacks[0].entries.unshift({
+        type: "unique",
+        umid: null,
+        redirect: null,
+        path: "C:\\Other\\explorer.exe",
+        icon: onlyBase("EARLIER_FILENAME"),
+      });
+
+      assertEquals(
+        ctx.instance.getIconPath({ path: "C:\\Windows\\explorer.exe" }),
+        onlyBase(`${A_PATH}\\EARLIER_FILENAME`),
+      );
+    });
+
     await t.step(
       "should match by filename when higher priority pack has filename match",
       () => {
