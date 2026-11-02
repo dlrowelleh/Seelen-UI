@@ -203,6 +203,16 @@ pub fn register_win_hook() -> Result<()> {
                 continue;
             }
 
+            let state = FULL_STATE.load();
+            let needs_edge_tracking =
+                state.is_weg_enabled() || state.settings.by_widget.fancy_toolbar.enabled;
+            if !needs_edge_tracking {
+                // No dock/toolbar consumes mouse-edge updates. Avoid waking USER32 at 10 Hz
+                // when the feature is disabled; re-check settings once per second.
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+
             if let Ok(pos) = Mouse::get_cursor_pos()
                 && last_pos != pos
             {
