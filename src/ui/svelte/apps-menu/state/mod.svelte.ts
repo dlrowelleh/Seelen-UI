@@ -72,7 +72,10 @@ export type FavPinnedItem = FavAppItem | FavFolderItem;
 
 // Load the stored favorites immediately. Native Start-menu layout is queried later so
 // the Win-key popup can mount without waiting for Explorer's shell layout API.
-const pinnedItems = await persistentRune<FavPinnedItem[]>("favorites", []);
+const [pinnedItems, displayMode] = await Promise.all([
+  persistentRune<FavPinnedItem[]>("favorites", []),
+  persistentRune("display_mode", StartDisplayMode.Normal),
+]);
 
 if (!pinnedItems.hasStoredValue) {
   void invoke(SeelenCommand.GetNativeStartMenu)
@@ -301,7 +304,6 @@ $effect.root(() => {
   });
 });
 
-const displayMode = await persistentRune("display_mode", StartDisplayMode.Normal);
 class State {
   isPinned = isPinned;
   togglePin = togglePin;
