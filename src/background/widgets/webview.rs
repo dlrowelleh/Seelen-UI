@@ -332,8 +332,8 @@ impl WebviewArgs {
         "--disable-crash-reporter",
         "--disable-background-networking",
         "--disable-component-update",
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
+        // Keep Chromium background timer throttling and occlusion tracking enabled. Hidden
+        // widgets should not wake their renderers at foreground cadence.
         // prevents the browser from lowering the CPU priority of invisible windows, oposite of what we want
         // "--disable-renderer-backgrounding"
         "--disable-sync",
