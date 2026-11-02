@@ -21,7 +21,7 @@
     if (session?.thumbnail) {
       return convertFileSrc(session.thumbnail);
     }
-    const icon = iconPackManager.value.getCustomIcon("defaultPlayerThumbnail");
+    const icon = iconPackManager.getCustomIcon("defaultPlayerThumbnail");
     const resolved = icon ? iconPackManager.resolve(icon).src : null;
     return resolved || "";
   });

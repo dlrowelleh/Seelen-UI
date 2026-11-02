@@ -37,7 +37,7 @@
   // Watch for src becoming null (trigger icon extraction)
   $effect(() => {
     // Wait for the asynchronously initialized icon pack before issuing extraction IPC.
-    if (!iconPackManager.isReady) return;
+    if (!iconPackManager.isReady) return undefined;
 
     if (!mounted.value) {
       const extract = () => {
@@ -61,6 +61,7 @@
       IconPackManager.requestIconExtraction({ path, umid });
     }
     previousSrc = icon.src;
+    return undefined;
   });
 </script>
 
