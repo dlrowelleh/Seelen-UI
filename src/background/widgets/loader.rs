@@ -299,7 +299,6 @@ impl WidgetPod {
         let live = self.live.clone();
         let label = self.label.clone();
         let retries = self.retries.clone();
-        let native_window = self.window.as_ref().map(|window| window.0.clone());
 
         let handle = get_tokio_handle().spawn(async move {
             let app = get_app_handle();
@@ -317,16 +316,6 @@ impl WidgetPod {
                     was_suspended = false;
                     retries.store(0, std::sync::atomic::Ordering::SeqCst);
                     tokio::time::sleep(LIVENESS_RELOAD_GRACE_PERIOD).await;
-                    continue;
-                }
-
-                // Hidden widgets are intentionally throttled by WebView2 and do not need
-                // periodic renderer pings. Their native window-destroy callback still
-                // handles teardown; the next visible interval resumes the liveness check.
-                if native_window
-                    .as_ref()
-                    .is_some_and(|window| !window.is_visible().unwrap_or(true))
-                {
                     continue;
                 }
 
