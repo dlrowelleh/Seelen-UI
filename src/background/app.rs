@@ -142,12 +142,17 @@ impl SeelenUI {
 
         if state.is_weg_enabled() {
             SeelenWeg::hide_native_taskbar();
-            UserAppsManager::init_taskbar_tracking();
         }
 
         WIDGET_MANAGER.reconcile()?;
         create_background_window()?;
         register_win_hook()?;
+
+        // Taskbar tracking uses the background window's shell-hook message pump, so it must
+        // only be initialized after create_background_window() has completed.
+        if state.is_weg_enabled() {
+            UserAppsManager::init_taskbar_tracking();
+        }
 
         // The first Alt+Tab request otherwise triggers a full synchronous Win32 window
         // enumeration and process/AppUserModelID resolution on the hotkey path. Warm the
