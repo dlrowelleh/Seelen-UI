@@ -77,7 +77,9 @@ impl crate::tauri_handlers::Handlers {
 
     pub fn get_user_app_windows_previews() -> HashMap<isize, UserAppWindowPreview> {
         get_apps_manager();
-        WinPreviewManager::instance().get_previews()
+        let previews = WinPreviewManager::instance();
+        previews.refresh_all();
+        previews.get_previews()
     }
 
     pub fn get_user_app_windows_colors() -> HashMap<isize, UserAppWindowColors> {
