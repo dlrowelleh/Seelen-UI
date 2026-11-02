@@ -112,7 +112,14 @@ fn schedule_deployment_reconcile() {
     std::thread::spawn(|| {
         loop {
             if RECONCILE_PENDING.swap(false, Ordering::AcqRel) {
-                reconcile_deployments();
+                // A malformed deployment or an unexpected platform error must not strand
+                // RECONCILE_RUNNING=true forever. Catch the panic, log it, and let the
+                // state machine return to idle so later settings/monitor changes can retry.
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(reconcile_deployments))
+                    .is_err()
+                {
+                    log::error!("Widget deployment reconciliation panicked; future requests will retry");
+                }
                 continue;
             }
 
