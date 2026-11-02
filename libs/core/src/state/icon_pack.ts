@@ -14,6 +14,18 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 type GetIconArgs = Extract<SluCmdArgumentMap, { [SeelenCommand.GetIcon]: unknown }>[SeelenCommand.GetIcon];
 
+type UniqueIconEntry = Extract<IconPackEntry, { type: "unique" }>;
+type SharedIconEntry = Extract<IconPackEntry, { type: "shared" }>;
+type CustomIconEntry = Extract<IconPackEntry, { type: "custom" }>;
+
+interface IconPackLookupIndex {
+  uniqueByUmid: Map<string, UniqueIconEntry>;
+  uniqueByPath: Map<string, UniqueIconEntry>;
+  uniqueByFilename: Map<string, UniqueIconEntry>;
+  sharedByExtension: Map<string, SharedIconEntry>;
+  customByKey: Map<string, CustomIconEntry>;
+}
+
 export class IconPackList extends List<IIconPack> {
   static getAsync(): Promise<IconPackList> {
     return newFromInvoke(this, SeelenCommand.StateGetIconPacks);
@@ -32,8 +44,10 @@ export class IconPackManager {
   private unlisteners: UnlistenFn[] = [];
   private isListeningForChanges = false;
 
-  /// list of active icon packs and fully resolved paths
+  /// Active icon packs in priority order, plus precomputed lookup maps so every FileIcon
+  /// does not linearly scan thousands of entries during rendering.
   private activeIconPacks: IconPack[] = [];
+  private activeIconIndices: IconPackLookupIndex[] = [];
 
   protected constructor(
     protected _availableIconPacks: IconPack[],
@@ -74,11 +88,57 @@ export class IconPackManager {
 
   protected cacheActiveIconPacks(): void {
     this.activeIconPacks = [];
+    this.activeIconIndices = [];
+
     for (const key of this._activeIconPackIds.toReversed()) {
       const pack = this._availableIconPacks.find((p) => p.id === key);
-      if (pack) {
-        this.activeIconPacks.push(pack);
+      if (!pack) continue;
+
+      this.activeIconPacks.push(pack);
+
+      const index: IconPackLookupIndex = {
+        uniqueByUmid: new Map(),
+        uniqueByPath: new Map(),
+        uniqueByFilename: new Map(),
+        sharedByExtension: new Map(),
+        customByKey: new Map(),
+      };
+
+      // Keep the first entry for each key: entries are ordered by preference inside
+      // a pack, just as Array.find() was before this index was introduced.
+      for (const entry of pack.entries) {
+        switch (entry.type) {
+          case "unique": {
+            if (entry.umid && !index.uniqueByUmid.has(entry.umid)) {
+              index.uniqueByUmid.set(entry.umid, entry);
+            }
+
+            if (entry.path) {
+              if (!index.uniqueByPath.has(entry.path)) {
+                index.uniqueByPath.set(entry.path, entry);
+              }
+
+              const filename = entry.path.split("\\\\").pop();
+              if (filename && !index.uniqueByFilename.has(filename)) {
+                index.uniqueByFilename.set(filename, entry);
+              }
+            }
+            break;
+          }
+          case "shared":
+            if (!index.sharedByExtension.has(entry.extension)) {
+              index.sharedByExtension.set(entry.extension, entry);
+            }
+            break;
+          case "custom":
+            if (!index.customByKey.has(entry.key)) {
+              index.customByKey.set(entry.key, entry);
+            }
+            break;
+        }
       }
+
+      this.activeIconIndices.push(index);
     }
   }
 
@@ -172,46 +232,37 @@ export class IconPackManager {
 
     const lowerPath = path?.toLowerCase();
 
-    // Extract extension only when there's an actual dot after the last path separator,
-    // to avoid treating directory names without dots as extensions.
+    // Extract extension only when there is an actual dot after the last path separator.
     const lastDot = lowerPath?.lastIndexOf(".");
-    const lastSlash = lowerPath?.lastIndexOf("\\") ?? -1;
-    const extension = lastDot !== undefined && lastDot > lastSlash ? lowerPath!.slice(lastDot + 1) : undefined;
+    const lastSlash = lowerPath?.lastIndexOf("\\\\") ?? -1;
+    const extension = lastDot !== undefined && lastDot > lastSlash
+      ? lowerPath!.slice(lastDot + 1)
+      : undefined;
 
-    // Add the starting path to __seen so that direct A→B→A cycles are caught in 2 hops.
+    // Add the starting path to __seen so direct A→B→A cycles are caught in 2 hops.
     if (lowerPath) {
       __seen.add(lowerPath);
     }
 
-    for (const pack of this.activeIconPacks) {
-      let entry: Extract<IconPackEntry, { type: "unique" }> | undefined;
+    // Preserve pack priority exactly: for each pack, UMID is checked first, then exact
+    // path, then executable filename. A higher-priority pack's path entry still wins over
+    // a lower-priority pack's UMID entry, matching the previous ordered Array.find loops.
+    for (const index of this.activeIconIndices) {
+      let entry: UniqueIconEntry | undefined;
 
       if (umid) {
-        entry = pack.entries.find(
-          (e) => e.type === "unique" && !!e.umid && e.umid === umid,
-        ) as Extract<IconPackEntry, { type: "unique" }>;
+        entry = index.uniqueByUmid.get(umid);
       }
 
       if (!entry && lowerPath) {
-        entry = pack.entries.find((e) => {
-          if (e.type !== "unique" || !e.path) {
-            return false;
-          }
+        entry = index.uniqueByPath.get(lowerPath);
 
-          if (e.path === lowerPath) {
-            return true;
+        if (!entry && extension === "exe") {
+          const filename = lowerPath.split("\\\\").pop();
+          if (filename) {
+            entry = index.uniqueByFilename.get(filename);
           }
-
-          // only search for filename in case of executable files
-          if (extension === "exe") {
-            const filename = lowerPath.split("\\").pop();
-            // Use separator-aware check to avoid partial name matches (e.g. "mysteam.exe" != "steam.exe")
-            if (filename && (e.path === filename || e.path.endsWith("\\" + filename))) {
-              return true;
-            }
-          }
-          return false;
-        }) as Extract<IconPackEntry, { type: "unique" }>;
+        }
       }
 
       if (entry) {
@@ -230,22 +281,18 @@ export class IconPackManager {
       }
     }
 
-    // search by file extension
+    // Search by file extension after all unique matches have been considered.
     if (!extension) {
       return null;
     }
 
-    for (const pack of this.activeIconPacks) {
-      const entry = pack.entries.find((e) => {
-        return e.type === "shared" && e.extension === extension;
-      });
-
+    for (const index of this.activeIconIndices) {
+      const entry = index.sharedByExtension.get(extension);
       if (entry) {
         return entry;
       }
     }
 
-    // If no icon is found in any icon pack, return null
     return null;
   }
 
@@ -286,8 +333,8 @@ export class IconPackManager {
    * If no icon pack haves the searched icon, will return null.
    */
   public getCustomIconEntry(name: string): IconPackEntry | null {
-    for (const pack of this.activeIconPacks) {
-      const entry = pack.entries.find((e) => e.type === "custom" && e.key === name);
+    for (const index of this.activeIconIndices) {
+      const entry = index.customByKey.get(name);
       if (entry) {
         return entry;
       }
