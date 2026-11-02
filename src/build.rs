@@ -1,8 +1,10 @@
-use std::{fs::create_dir, path::PathBuf};
+use std::{env, fs::create_dir, path::PathBuf};
 
 use slu_utils::{checksums::CheckSums, signature::sign_minisign};
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=SEELEN_ALLOW_UNSIGNED_BUILD");
+
     let _ = create_dir("gen");
 
     let mut checksums = CheckSums::new();
@@ -15,7 +17,21 @@ fn main() {
     checksums.write(&sums_path).unwrap();
 
     if !cfg!(debug_assertions) {
-        sign_sha256sums(&sums_path);
+        if allow_unsigned_build() {
+            // Deliberately unsigned CI artifacts may be built without the repository's
+            // Minisign private key. The runtime still validates SHA-256 checksums; only
+            // the publisher-signature check is disabled in this explicitly opted-in build.
+            println!("cargo:rustc-env=SEELEN_UNSIGNED_BUILD=1");
+            println!("cargo:warning=Building unsigned: Minisign signature verification is disabled");
+            std::fs::write(
+                sums_path.with_extension("sig"),
+                "UNSIGNED BUILD: SHA256SUMS publisher signature intentionally omitted",
+            )
+            .expect("Failed to write unsigned build marker");
+        } else {
+            println!("cargo:rustc-env=SEELEN_UNSIGNED_BUILD=0");
+            sign_sha256sums(&sums_path);
+        }
     } else {
         std::fs::write(
             sums_path.with_extension("sig"),
@@ -25,6 +41,12 @@ fn main() {
     }
 
     tauri_build::build();
+}
+
+fn allow_unsigned_build() -> bool {
+    env::var("SEELEN_ALLOW_UNSIGNED_BUILD")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
 }
 
 fn target_dir() -> PathBuf {

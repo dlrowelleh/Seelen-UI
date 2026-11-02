@@ -29,9 +29,15 @@ pub async fn ensure_bundle_files_integrity(app: &tauri::AppHandle) -> Result<()>
         return Err("Checksums file not found".into());
     }
 
-    // Skip signature validation in development mode
-    if !tauri::is_dev() {
+    // Unsigned builds are explicitly opted into at compile time. They still validate every
+    // bundled file against SHA256SUMS; only the publisher signature is skipped.
+    let unsigned_build = option_env!("SEELEN_UNSIGNED_BUILD") == Some("1");
+    if !tauri::is_dev() && !unsigned_build {
         verify_external_signature(&checksums_path, &signature_path, MINISIGN_PUBLIC_KEY)?;
+    } else if unsigned_build {
+        log::warn!(
+            "This is an unsigned build: publisher signature verification is disabled; SHA-256 checks remain active"
+        );
     }
     validate_directory_checksums(&static_path, &checksums_path).await?;
 

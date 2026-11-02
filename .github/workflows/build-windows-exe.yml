@@ -1,0 +1,89 @@
+name: Build Windows x64 EXE (Unsigned)
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "src/**"
+      - "libs/**"
+      - "static/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/tauri.conf.json"
+      - ".github/workflows/build-windows-exe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-windows-exe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+        with:
+          rust-targets: x86_64-pc-windows-msvc
+          cache-key-prefix: unsigned-exe-x64
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Hook DLL
+        run: cargo build --release --target x86_64-pc-windows-msvc -p sluhk
+
+      - name: Build application binaries (unsigned)
+        env:
+          SEELEN_ALLOW_UNSIGNED_BUILD: "1"
+        run: npx tauri build --ci --verbose --no-bundle --target x86_64-pc-windows-msvc
+
+      - name: Create unsigned NSIS installer
+        run: npx tauri bundle --ci --verbose --target x86_64-pc-windows-msvc --no-sign --no-binary-patching
+
+      - name: Verify EXE outputs
+        shell: pwsh
+        run: |
+          $release = "target/x86_64-pc-windows-msvc/release"
+          $app = Join-Path $release "seelen-ui.exe"
+          $installers = Get-ChildItem (Join-Path $release "bundle/nsis") -Filter "*.exe" -File
+
+          if (-not (Test-Path $app)) {
+            throw "Application executable was not produced: $app"
+          }
+          if (-not $installers) {
+            throw "NSIS installer executable was not produced."
+          }
+
+          Write-Output "Application EXE:"
+          Get-Item $app | Select-Object FullName, Length
+          Write-Output "Installer EXE(s):"
+          $installers | Select-Object FullName, Length
+          Write-Output "SHA256:"
+          Get-FileHash $app -Algorithm SHA256
+          $installers | ForEach-Object { Get-FileHash $_.FullName -Algorithm SHA256 }
+
+      - name: Upload executable artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: seelen-ui-windows-x64-unsigned
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            target/x86_64-pc-windows-msvc/release/seelen-ui.exe
+            target/x86_64-pc-windows-msvc/release/slu.exe
+            target/x86_64-pc-windows-msvc/release/slu-service.exe
+            target/x86_64-pc-windows-msvc/release/*.dll
+            target/x86_64-pc-windows-msvc/release/SHA256SUMS
+            target/x86_64-pc-windows-msvc/release/SHA256SUMS.sig
+            target/x86_64-pc-windows-msvc/release/static/**
+            target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe

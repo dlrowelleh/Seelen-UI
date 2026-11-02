@@ -8,6 +8,8 @@ on:
       - "**.md"
       - "documentation/**"
       - ".github/**"
+      - "src/build.rs"
+      - "src/background/utils/integrity/checksums.rs"
       - "crowdin.yml"
   workflow_dispatch:
 
