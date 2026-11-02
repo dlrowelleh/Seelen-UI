@@ -34,7 +34,7 @@ use crate::{
     resources::RESOURCES,
     state::application::FULL_STATE,
     utils::{atomic_write_file, constants::SEELEN_COMMON, lock_free::SyncHashMap},
-    widgets::{manager::WIDGET_MANAGER, webview::WidgetWebviewLabel},
+    widgets::{manager::WIDGET_MANAGER, webview::{self, WidgetWebviewLabel}},
     windows_api::{
         AppBarData, WindowsApi,
         input::{Keyboard, Mouse},
@@ -110,6 +110,12 @@ fn trigger_widget_inner(
             c.start_webview(&label);
         });
         return Ok(());
+    }
+
+    // A hidden internal widget may have a suspended WebView2 renderer. Resume it
+    // before dispatching the event so the widget can process the trigger immediately.
+    if let Some(window) = get_app_handle().get_webview_window(&label.raw) {
+        webview::resume_if_suspended(&window);
     }
 
     get_app_handle().emit_to(label.raw, SeelenEvent::WidgetTriggered, &payload)?;

@@ -8,7 +8,7 @@ use seelen_core::{
 };
 
 use tauri::Manager;
-use windows::Win32::Foundation::HWND;
+use windows::Win32::Foundation::{BOOL, HWND};
 
 use crate::{
     app::get_app_handle,
@@ -159,51 +159,115 @@ pub fn lock_rasterization_scale_to_one(webview: &tauri::WebviewWindow) -> Result
     Ok(())
 }
 
-/// Forces the WebView2 renderer to react as if the OS was under memory pressure,
-/// via the same CDP call DevTools issues internally. Unlike `window.gc()`, this
-/// actually makes V8/Blink release freed pages back to the OS, because real pressure
-/// almost never reaches an individual background widget when the system overall has
-/// plenty of RAM free.
-pub fn simulate_memory_pressure(webview: &tauri::WebviewWindow) {
-    if webview.is_focused().unwrap_or(false) {
-        return;
-    }
+/// Suspends an invisible WebView2 renderer after it has been idle.
+///
+/// WebView2 pauses JavaScript timers and animations and can release renderer memory.
+/// This is best-effort: pages with active work may decline suspension. The controller
+/// must be invisible before TrySuspend is called.
+pub fn suspend_if_hidden(webview: &tauri::WebviewWindow) {
+    use webview2_com::{
+        Microsoft::Web::WebView2::Win32::ICoreWebView2_3,
+        TrySuspendCompletedHandler,
+    };
+    use windows_core::Interface;
+
+    webview
+        .with_webview(|platform_webview| {
+            let controller = platform_webview.controller();
+            let mut is_visible = BOOL(1);
+            if let Err(err) = unsafe { controller.IsVisible(&mut is_visible) } {
+                log::debug!("Failed to read WebView2 visibility before suspension: {err}");
+                return;
+            }
+            if is_visible.as_bool() {
+                return;
+            }
+
+            let core_webview = match unsafe { controller.CoreWebView2() } {
+                Ok(webview) => webview,
+                Err(err) => {
+                    log::debug!("Failed to get CoreWebView2 for suspension: {err}");
+                    return;
+                }
+            };
+
+            let webview = match core_webview.cast::<ICoreWebView2_3>() {
+                Ok(webview) => webview,
+                Err(err) => {
+                    // Older WebView2 runtimes may not expose ICoreWebView2_3.
+                    log::debug!("WebView2 runtime does not support TrySuspend: {err}");
+                    return;
+                }
+            };
+
+            let mut is_suspended = BOOL(0);
+            if let Err(err) = unsafe { webview.IsSuspended(&mut is_suspended) } {
+                log::debug!("Failed to query WebView2 suspension state: {err}");
+                return;
+            }
+            if is_suspended.as_bool() {
+                return;
+            }
+
+            let handler = TrySuspendCompletedHandler::create(Box::new(
+                move |error_code, is_successful| {
+                    match error_code {
+                        Ok(()) if is_successful.as_bool() => {
+                            log::trace!("Hidden WebView2 renderer suspended");
+                        }
+                        Ok(()) => {
+                            // WebView2 can decline suspension when the page has active work.
+                            log::debug!("WebView2 declined suspension; it will be retried later");
+                        }
+                        Err(err) => {
+                            log::debug!("WebView2 TrySuspend callback failed: {err}");
+                        }
+                    }
+                    Ok(())
+                },
+            ));
+
+            if let Err(err) = unsafe { webview.TrySuspend(&handler) } {
+                log::debug!("Failed to request WebView2 suspension: {err}");
+            }
+        })
+        .log_error();
+}
+
+/// Resume a suspended WebView2 before dispatching an event to its JavaScript context.
+/// WebView2 also resumes automatically when made visible, but explicit resumption is
+/// needed for events dispatched while the widget is still hidden.
+pub fn resume_if_suspended(webview: &tauri::WebviewWindow) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_3;
+    use windows_core::Interface;
 
     webview
         .with_webview(|platform_webview| {
             let controller = platform_webview.controller();
             let core_webview = match unsafe { controller.CoreWebView2() } {
-                Ok(core_webview) => core_webview,
+                Ok(webview) => webview,
                 Err(err) => {
-                    log::warn!("Failed to get ICoreWebView2 for memory pressure simulation: {err}");
+                    log::debug!("Failed to get CoreWebView2 before resume: {err}");
                     return;
                 }
             };
 
-            // Can't use our own `WindowsString` here: webview2-com pins its own `windows`
-            // crate version (0.61) which is semver-incompatible with the one this project
-            // depends on directly (0.62.2), so their `PCWSTR` types don't unify. Must go
-            // through webview2-com's own string helper, built against its own `windows`.
-            let result =
-                webview2_com::CallDevToolsProtocolMethodCompletedHandler::wait_for_async_operation(
-                    Box::new(move |handler| unsafe {
-                        let method = webview2_com::CoTaskMemPWSTR::from(
-                            "Memory.simulatePressureNotification",
-                        );
-                        let params = webview2_com::CoTaskMemPWSTR::from(r#"{"level":"critical"}"#);
-                        core_webview
-                            .CallDevToolsProtocolMethod(
-                                *method.as_ref().as_pcwstr(),
-                                *params.as_ref().as_pcwstr(),
-                                &handler,
-                            )
-                            .map_err(webview2_com::Error::WindowsError)
-                    }),
-                    Box::new(|error_code, _result| error_code),
-                );
+            let webview = match core_webview.cast::<ICoreWebView2_3>() {
+                Ok(webview) => webview,
+                Err(_) => return,
+            };
 
-            if let Err(err) = result {
-                log::warn!("Memory.simulatePressureNotification failed: {err:?}");
+            let mut is_suspended = BOOL(0);
+            if let Err(err) = unsafe { webview.IsSuspended(&mut is_suspended) } {
+                log::debug!("Failed to query WebView2 suspension state before resume: {err}");
+                return;
+            }
+            if is_suspended.as_bool() {
+                if let Err(err) = unsafe { webview.Resume() } {
+                    log::warn!("Failed to resume suspended WebView2: {err}");
+                } else {
+                    log::trace!("Resumed suspended WebView2 renderer");
+                }
             }
         })
         .log_error();

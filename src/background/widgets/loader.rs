@@ -1,9 +1,9 @@
 use std::{
     sync::{Arc, atomic::AtomicU8},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use seelen_core::state::{Widget, WidgetInstanceMode, WidgetStatus};
+use seelen_core::state::{Widget, WidgetInstanceMode, WidgetLoader, WidgetStatus};
 use tauri::{Emitter, Listener};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use uuid::Uuid;
@@ -39,7 +39,7 @@ const LIVENESS_RELOAD_GRACE_PERIOD: Duration = Duration::from_secs(10);
 // memory pressure to their renderer and the JS heap balloons unchecked. Simulating it
 // periodically forces WebView2 to actually release freed pages back to the OS.
 // WebView2 can reclaim freed pages periodically without a frequent timer wake-up.
-const MEMORY_PRESSURE_INTERVAL: Duration = Duration::from_secs(120);
+const HIDDEN_WEBVIEW_SUSPEND_CHECK_INTERVAL: Duration = Duration::from_secs(15);\nconst HIDDEN_WEBVIEW_SUSPEND_GRACE_PERIOD: Duration = Duration::from_secs(20);
 
 pub struct WidgetDeployment {
     pub definition: Arc<Widget>,
@@ -165,7 +165,7 @@ pub struct WidgetPod {
 
     live: Arc<tokio::sync::Notify>,
     liveness_prove_handle: Option<tokio::task::JoinHandle<()>>,
-    memory_pressure_handle: Option<tokio::task::JoinHandle<()>>,
+    hidden_suspend_handle: Option<tokio::task::JoinHandle<()>>,
     retries: Arc<AtomicU8>,
 }
 
@@ -179,7 +179,7 @@ impl WidgetPod {
             owner_hwnd,
             live: Arc::new(tokio::sync::Notify::new()),
             liveness_prove_handle: None,
-            memory_pressure_handle: None,
+            hidden_suspend_handle: None,
             retries: Arc::new(AtomicU8::new(0)),
         }
     }
@@ -261,34 +261,60 @@ impl WidgetPod {
 
         self.window = Some(window);
         notify_widget_statuses_change();
-        self.start_liveness_prove();
-        self.start_memory_pressure_simulation();
+
+        // Third-party widgets may intentionally run background timers or audio work.
+        // Only Seelen-owned internal widgets are eligible for automatic suspension.
+        let suspend_when_hidden = matches!(
+            definition.loader,
+            WidgetLoader::Internal | WidgetLoader::InternalReact
+        );
+        self.start_hidden_webview_suspension(suspend_when_hidden);
+        self.start_liveness_prove(suspend_when_hidden);
     }
 
-    fn start_memory_pressure_simulation(&mut self) {
+    fn start_hidden_webview_suspension(&mut self, enabled: bool) {
+        if !enabled {
+            return;
+        }
         let Some(window) = &self.window else {
             return;
         };
+
         let native_window = window.0.clone();
         let webview = window.handle();
+        let label = self.label.clone();
 
         let handle = get_tokio_handle().spawn(async move {
-            loop {
-                tokio::time::sleep(MEMORY_PRESSURE_INTERVAL).await;
+            let mut hidden_since: Option<Instant> = None;
 
-                // Only ask hidden WebView2 renderers to return freed pages to the OS.
-                // Applying artificial memory pressure to visible widgets can cause avoidable
-                // cache churn and repaint work.
-                if !native_window.is_visible().unwrap_or(true) {
-                    webview::simulate_memory_pressure(&webview);
+            loop {
+                tokio::time::sleep(HIDDEN_WEBVIEW_SUSPEND_CHECK_INTERVAL).await;
+
+                // A failed visibility query must be treated as visible. Suspending an
+                // uncertain window could break a widget that is currently on screen.
+                let is_visible = native_window.is_visible().unwrap_or(true);
+                if is_visible {
+                    hidden_since = None;
+                    continue;
+                }
+
+                // Never suspend a widget while it is still mounting or initializing.
+                if !WIDGET_MANAGER.is_ready(&label) {
+                    hidden_since = None;
+                    continue;
+                }
+
+                let hidden_since = hidden_since.get_or_insert_with(Instant::now);
+                if hidden_since.elapsed() >= HIDDEN_WEBVIEW_SUSPEND_GRACE_PERIOD {
+                    webview::suspend_if_hidden(&webview);
                 }
             }
         });
 
-        self.memory_pressure_handle = Some(handle);
+        self.hidden_suspend_handle = Some(handle);
     }
 
-    fn start_liveness_prove(&mut self) {
+    fn start_liveness_prove(&mut self, skip_hidden_internal_widgets: bool) {
         if let Some(window) = &self.window {
             let live = self.live.clone();
             window.0.listen("internal::liveness-pong", move |_event| {
@@ -316,6 +342,18 @@ impl WidgetPod {
                     was_suspended = false;
                     retries.store(0, std::sync::atomic::Ordering::SeqCst);
                     tokio::time::sleep(LIVENESS_RELOAD_GRACE_PERIOD).await;
+                    continue;
+                }
+
+                // A suspended renderer cannot answer JavaScript liveness pings. Skip
+                // probes while an internal widget is hidden; visibility restoration resumes
+                // the renderer automatically and probes continue on the next interval.
+                if skip_hidden_internal_widgets
+                    && native_window
+                        .as_ref()
+                        .is_some_and(|window| !window.is_visible().unwrap_or(true))
+                {
+                    retries.store(0, std::sync::atomic::Ordering::SeqCst);
                     continue;
                 }
 
@@ -369,7 +407,7 @@ impl Drop for WidgetPod {
         if let Some(handle) = self.liveness_prove_handle.take() {
             handle.abort();
         }
-        if let Some(handle) = self.memory_pressure_handle.take() {
+        if let Some(handle) = self.hidden_suspend_handle.take() {
             handle.abort();
         }
     }
