@@ -61,7 +61,6 @@ await Promise.all([
   settings.init(),
   selfWinId.init(),
   interactables.init(),
-  previews.init(),
   windowsColors.init(),
   focused.init(),
   widgetStatuses.init(),
