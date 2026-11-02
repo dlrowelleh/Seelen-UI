@@ -88,6 +88,9 @@ impl StartMenuManager {
             Self::load_packaged_items()?
         ));
         manager.setup_listeners();
+        // The first frontend request may have received an empty cached snapshot while the
+        // index was loading. Notify it after both shortcut and packaged-app indexes are ready.
+        Self::send(StartMenuEvent::ItemsRefreshed);
         Ok(())
     }
 
