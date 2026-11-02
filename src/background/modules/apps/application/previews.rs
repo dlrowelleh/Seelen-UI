@@ -9,13 +9,12 @@ use win_screenshot::prelude::capture_window;
 use crate::{
     error::{Result, ResultLogExt},
     event_manager,
-    hook::HookManager,
     modules::apps::application::{USER_APPS_MANAGER, UserAppWinEvent, UserAppsManager},
     utils::lock_free::SyncHashMap,
     windows_api::{
         WindowsApi,
         event_window::IS_INTERACTIVE_SESSION,
-        window::{Window, event::WinEvent},
+        window::Window,
     },
 };
 
@@ -103,24 +102,8 @@ impl WinPreviewManager {
             }
         });
 
-        HookManager::subscribe(|(event, window)| {
-            if !USER_APPS_MANAGER.contains_win(&window) {
-                return;
-            }
-            let addr = window.address();
-            match event {
-                WinEvent::ObjectNameChange | WinEvent::SynDebouncedRectChange => {
-                    WINDOWS_PREVIEWS.enqueue_capture(addr);
-                }
-                WinEvent::SystemMinimizeEnd => {
-                    std::thread::spawn(move || {
-                        std::thread::sleep(Duration::from_millis(300));
-                        WINDOWS_PREVIEWS.enqueue_capture(addr);
-                    });
-                }
-                _ => {}
-            }
-        });
+        // Preview capture is requested by the task switcher when it opens. Do not keep
+        // taking screenshots in the background between Alt+Tab sessions.
 
         Ok(())
     }
@@ -142,7 +125,6 @@ impl WinPreviewManager {
                 capture,
             },
         );
-        self.enqueue_capture(addr);
     }
 
     fn enqueue_capture(&self, addr: isize) {
@@ -218,6 +200,14 @@ impl WinPreviewManager {
         Self::send(WinPreviewEvent::ColorsUpdated(addr));
 
         Ok(())
+    }
+
+    /// Request fresh screenshots for the current Alt+Tab session. This is deliberately
+    /// explicit rather than event-driven so hidden switchers do not keep capturing windows.
+    pub fn refresh_all(&self) {
+        for hwnd in USER_APPS_MANAGER.interactable_windows.map(|window| window.hwnd) {
+            self.enqueue_capture(hwnd);
+        }
     }
 
     pub fn get_previews(&self) -> HashMap<isize, UserAppWindowPreview> {
