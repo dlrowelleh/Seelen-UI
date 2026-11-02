@@ -54,7 +54,7 @@ impl UserAppsManager {
 
         spawn_named_thread("InteractableWindowsRevalidator", || {
             loop {
-                std::thread::sleep(std::time::Duration::from_millis(5000));
+                std::thread::sleep(std::time::Duration::from_millis(15000));
 
                 // Pause when session is not interactive to reduce CPU usage
                 if !IS_INTERACTIVE_SESSION.load(Ordering::Acquire) {
