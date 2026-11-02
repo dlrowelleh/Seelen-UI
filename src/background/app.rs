@@ -123,7 +123,7 @@ impl SeelenUI {
         // The first Alt+Tab request otherwise triggers a full synchronous Win32 window
         // enumeration and process/AppUserModelID resolution on the hotkey path. Warm the
         // window cache and WinEvent subscriptions in the background when the switcher is enabled.
-        if state.is_widget_enabled(&"@seelen/task-switcher".into()) {
+        if state.settings.is_widget_enabled(&"@seelen/task-switcher".into()) {
             std::thread::Builder::new()
                 .name("UserAppWindowsWarmup".into())
                 .spawn(|| {
