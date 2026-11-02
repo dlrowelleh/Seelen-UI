@@ -1,4 +1,4 @@
-use std::sync::{LazyLock, Mutex, atomic::Ordering};
+use std::sync::{LazyLock, Mutex, atomic::{AtomicBool, Ordering}};
 
 use slu_ipc::messages::SvcAction;
 use tauri::{AppHandle, Emitter, Wry};
@@ -67,6 +67,27 @@ pub struct SeelenUI {}
 // alive for the lifetime of the app so install/uninstall notifications continue to arrive.
 static START_MENU_COM_THREAD: LazyLock<Mutex<Option<ComThread<()>>>> =
     LazyLock::new(|| Mutex::new(None));
+static TASKBAR_TRACKING_INIT_SCHEDULED: AtomicBool = AtomicBool::new(false);
+
+/// Initializes taskbar-only tracking once, outside the app startup/settings thread.
+fn schedule_taskbar_tracking_init() -> Result<()> {
+    if TASKBAR_TRACKING_INIT_SCHEDULED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return Ok(());
+    }
+
+    if let Err(error) = std::thread::Builder::new()
+        .name("TaskbarTracking".into())
+        .spawn(UserAppsManager::init_taskbar_tracking)
+    {
+        TASKBAR_TRACKING_INIT_SCHEDULED.store(false, Ordering::Release);
+        return Err(error.into());
+    }
+
+    Ok(())
+}
 
 /// Queue WinRT work on the long-lived Start-menu STA. PackageCatalog callbacks must never
 /// move WinRT operations to an arbitrary std::thread without initializing its COM apartment.
@@ -151,9 +172,7 @@ impl SeelenUI {
         // Taskbar tracking uses the background window's shell-hook message pump, so it must
         // only be initialized after create_background_window() has completed.
         if state.is_weg_enabled() {
-            std::thread::Builder::new()
-                .name("TaskbarTracking".into())
-                .spawn(UserAppsManager::init_taskbar_tracking)?;
+            schedule_taskbar_tracking_init()?;
         }
 
         // The first Alt+Tab request otherwise triggers a full synchronous Win32 window
@@ -200,9 +219,7 @@ impl SeelenUI {
 
         if state.is_weg_enabled() {
             SeelenWeg::hide_native_taskbar();
-            std::thread::Builder::new()
-                .name("TaskbarTracking".into())
-                .spawn(UserAppsManager::init_taskbar_tracking)?;
+            schedule_taskbar_tracking_init()?;
         } else {
             SeelenWeg::restore_native_taskbar()?;
         }
