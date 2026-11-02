@@ -166,8 +166,7 @@ pub fn lock_rasterization_scale_to_one(webview: &tauri::WebviewWindow) -> Result
 /// must be invisible before TrySuspend is called.
 pub fn suspend_if_hidden(webview: &tauri::WebviewWindow) {
     use webview2_com::{
-        Microsoft::Web::WebView2::Win32::ICoreWebView2_3,
-        TrySuspendCompletedHandler,
+        Microsoft::Web::WebView2::Win32::ICoreWebView2_3, TrySuspendCompletedHandler,
     };
     use windows_core::Interface;
 
@@ -209,8 +208,8 @@ pub fn suspend_if_hidden(webview: &tauri::WebviewWindow) {
                 return;
             }
 
-            let handler = TrySuspendCompletedHandler::create(Box::new(
-                move |error_code, is_successful| {
+            let handler =
+                TrySuspendCompletedHandler::create(Box::new(move |error_code, is_successful| {
                     match error_code {
                         Ok(()) if is_successful.as_bool() => {
                             log::trace!("Hidden WebView2 renderer suspended");
@@ -224,8 +223,7 @@ pub fn suspend_if_hidden(webview: &tauri::WebviewWindow) {
                         }
                     }
                     Ok(())
-                },
-            ));
+                }));
 
             if let Err(err) = unsafe { webview.TrySuspend(&handler) } {
                 log::debug!("Failed to request WebView2 suspension: {err}");
