@@ -41,8 +41,21 @@ class IconPackManagerWrap {
     return innerState.value !== null;
   }
 
+  /** Compatibility accessor. It is null until the asynchronous initialization finishes. */
+  get value(): IconPackManager | null {
+    return innerState.value;
+  }
+
   get _version() {
     return innerState._version;
+  }
+
+  resolve(icon: Icon): IconState {
+    return {
+      src: (prefersDarkColorScheme.value ? icon.dark : icon.light) || icon.base,
+      mask: icon.mask,
+      isAproximatelySquare: icon.isAproximatelySquare,
+    };
   }
 
   getIcon(args: { path?: string | null; umid?: string | null }): Icon | null {
