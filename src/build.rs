@@ -22,7 +22,9 @@ fn main() {
             // Minisign private key. The runtime still validates SHA-256 checksums; only
             // the publisher-signature check is disabled in this explicitly opted-in build.
             println!("cargo:rustc-env=SEELEN_UNSIGNED_BUILD=1");
-            println!("cargo:warning=Building unsigned: Minisign signature verification is disabled");
+            println!(
+                "cargo:warning=Building unsigned: Minisign signature verification is disabled"
+            );
             std::fs::write(
                 sums_path.with_extension("sig"),
                 "UNSIGNED BUILD: SHA256SUMS publisher signature intentionally omitted",
