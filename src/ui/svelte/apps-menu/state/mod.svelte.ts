@@ -99,7 +99,7 @@ if (!pinnedItems.hasStoredValue) {
           }
         }
 
-        const itemId = item.packagedAppId || item.destopAppId || item.desktopAppLink;
+        const itemId = item.packagedAppId || item.destopAppId || item.desktopAppLink?.toLowerCase();
         if (typeof itemId === "string" && itemId.length > 0) {
           initialState.push({ type: "app", itemId });
         }
