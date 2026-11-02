@@ -34,10 +34,7 @@ use crate::{
     resources::RESOURCES,
     state::application::FULL_STATE,
     utils::{atomic_write_file, constants::SEELEN_COMMON, lock_free::SyncHashMap},
-    widgets::{
-        manager::WIDGET_MANAGER,
-        webview::WidgetWebviewLabel,
-    },
+    widgets::{manager::WIDGET_MANAGER, webview::WidgetWebviewLabel},
     windows_api::{
         AppBarData, WindowsApi,
         input::{Keyboard, Mouse},
