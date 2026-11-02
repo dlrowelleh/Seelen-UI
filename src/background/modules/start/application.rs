@@ -78,8 +78,8 @@ impl StartMenuManager {
         &START_MENU_MANAGER
     }
 
-    /// Loads the start menu items and sets up
-    /// the listeners that keep them updated. Should be awaited during the app startup.
+    /// Loads the start-menu index and registers file/package listeners.
+    /// Run on the long-lived COM STA thread so PackageCatalog callbacks keep flowing.
     pub fn initialize() -> Result<()> {
         let manager = Self::instance();
         crate::measure!("StartMenu Shortcuts", manager.load_shortcuts());
