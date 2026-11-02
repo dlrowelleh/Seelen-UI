@@ -426,11 +426,12 @@ impl WebviewArgs {
         "--disable-software-rasterizer",
     ];
 
-    const UNSTABLE_OPTIMIZATIONS: &[&str] = &[
-        // this reduces ram usage but if a widget crashes it will crash
-        // all widgets with the same loader, so it's not worth it
-        "--process-per-site",
-    ];
+    // Share Chromium renderer processes between WebViews belonging to the same
+    // site. This materially reduces the per-widget process overhead. The trade-off
+    // is a larger crash domain: a renderer crash can affect multiple same-site widgets.
+    // This is enabled by default because Seelen's internal widgets are shipped as a
+    // small number of app origins and memory usage is a primary constraint.
+    const PROCESS_SHARING_ARGS: &[&str] = &["--process-per-site"];
 
     pub fn create(with_gpu: bool, unstable_optimizations: bool) -> Self {
         let mut args: Vec<String> = Self::BASE_ARGS.iter().map(|s| s.to_string()).collect();
@@ -441,9 +442,9 @@ impl WebviewArgs {
             args.extend(Self::PERFORMANCE_ARGS.iter().map(|s| s.to_string()));
         };
 
-        if unstable_optimizations {
-            args.extend(Self::UNSTABLE_OPTIMIZATIONS.iter().map(|s| s.to_string()));
-        }
+        // Unlike the former opt-in unstable flag, renderer sharing is now part
+        // of the default low-memory profile.
+        args.extend(Self::PROCESS_SHARING_ARGS.iter().map(|s| s.to_string()));
 
         Self {
             args,
