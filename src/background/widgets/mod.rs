@@ -36,7 +36,7 @@ use crate::{
     utils::{atomic_write_file, constants::SEELEN_COMMON, lock_free::SyncHashMap},
     widgets::{
         manager::WIDGET_MANAGER,
-        webview::{self, WidgetWebviewLabel},
+        webview::WidgetWebviewLabel,
     },
     windows_api::{
         AppBarData, WindowsApi,
