@@ -40,8 +40,20 @@
     if (!iconPackManager.isReady) return;
 
     if (!mounted.value) {
-      IconPackManager.requestIconExtraction({ path, umid });
-      mounted.value = true;
+      const extract = () => {
+        if (mounted.value) return;
+        mounted.value = true;
+        IconPackManager.requestIconExtraction({ path, umid });
+      };
+
+      // Alt+Tab can mount many cards at once. Defer their native icon extraction
+      // requests until the renderer is idle so the first switcher frame stays responsive.
+      if (lazy) {
+        const idleId = requestIdleCallback(extract, { timeout: 1000 });
+        return () => cancelIdleCallback(idleId);
+      }
+
+      extract();
     }
 
     // Trigger icon extraction when src goes from non-null to null
