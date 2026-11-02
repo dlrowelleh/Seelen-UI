@@ -16,6 +16,16 @@ let position = $state<SeelenWegSide>(SeelenWegSide.Bottom);
 Widget.self.onTrigger(({ customArgs }) => {
   hwnds = (customArgs?.hwnds as number[]) ?? [];
   position = (customArgs?.position as SeelenWegSide) ?? SeelenWegSide.Bottom;
+
+  // Refresh screenshots each time the preview popup is opened. The global preview
+  // manager no longer captures every window continuously while the popup is hidden.
+  void invoke(SeelenCommand.GetUserAppWindowsPreviews)
+    .then((snapshot) => {
+      previews.value = snapshot;
+    })
+    .catch((error) => {
+      console.error("Failed to refresh dock preview thumbnails:", error);
+    });
 });
 
 const currentInteractables = $derived(interactables.value?.filter((w) => hwnds.includes(w.hwnd)) ?? []);
