@@ -417,7 +417,8 @@ Deno.test("IconPackManager", async (t) => {
           umid: "BadRedirect",
           path: "C:\\redirect\\source.exe",
           redirect: "C:\\nonexistent\\path.exe",
-          icon: onlyBase(A_PATH + "\\ShouldNotUseThis.png"), // <-- should be ignored inclusively if redirect points to non-existent path
+          // This icon must be ignored when its redirect target cannot be resolved.
+          icon: onlyBase(A_PATH + "\\ShouldNotUseThis.png"),
         });
         ctx.instance.reindex();
 
