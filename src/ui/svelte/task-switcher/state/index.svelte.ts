@@ -81,7 +81,7 @@ class State {
   }
 
   get previews() {
-    return previews.value;
+    return previews.isInitialized() ? previews.value : {};
   }
 
   get selectedWindow() {
@@ -134,7 +134,9 @@ $effect.root(() => {
   // Poll the hardware Alt key state instead of relying on keyup events,
   // since the widget-focus trick fakes an Alt keydown that never reaches window.onkeyup.
   $effect(() => {
-    if (!showing) {
+    // Polling uses a native IPC call every 50 ms. It is only needed when releasing
+    // Alt commits the selection; the manual Ctrl+Alt+Tab switcher does not use it.
+    if (!showing || !autoConfirm) {
       return;
     }
 
