@@ -240,8 +240,8 @@ pub fn suspend_if_hidden(webview: &tauri::WebviewWindow) {
 /// while third-party widgets retain background execution and use the low target.
 pub fn set_low_memory_target(webview: &tauri::WebviewWindow, low: bool) {
     use webview2_com::Microsoft::Web::WebView2::Win32::{
-        ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
-        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        ICoreWebView2_19,
     };
     use windows_core::Interface;
 
