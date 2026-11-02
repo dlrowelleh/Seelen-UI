@@ -32,14 +32,30 @@ subscribe(SeelenEvent.UserFolderChanged, ({ payload: { ofFolder, content } }) =>
   }
 });
 
-await Promise.all([
-  desktop.init(),
-  downloads.init(),
-  documents.init(),
-  music.init(),
-  pictures.init(),
-  videos.init(),
-]);
+let loadPromise: Promise<void> | undefined;
+
+/**
+ * Folder enumeration is only required for file search. Do not fetch six user-folder
+ * listings while the Start-menu popup is mounting.
+ */
+export function ensureKnownFoldersLoaded(): Promise<void> {
+  if (!loadPromise) {
+    loadPromise = Promise.all([
+      desktop.init(),
+      downloads.init(),
+      documents.init(),
+      music.init(),
+      pictures.init(),
+      videos.init(),
+    ])
+      .then(() => undefined)
+      .catch((error) => {
+        loadPromise = undefined;
+        console.error("Failed to load known-folder contents:", error);
+      });
+  }
+  return loadPromise;
+}
 
 function pathAsItem(path: string): StartMenuItem {
   return {
@@ -68,34 +84,3 @@ export const foldersAsStartMenuItems = {
   },
 };
 
-// =======================================================
-// ======================For Debug========================
-// =======================================================
-
-const extensionCounts: Record<string, number> = {};
-let index = 0;
-function process(deadline: IdleDeadline) {
-  while (index < _foldersAsStartMenuItems.length && deadline.timeRemaining() > 0) {
-    const item = _foldersAsStartMenuItems[index++];
-    const extension = item?.path.split(".").pop();
-    if (extension) {
-      extensionCounts[extension] ??= 0;
-      extensionCounts[extension]++;
-    }
-  }
-
-  if (index < _foldersAsStartMenuItems.length) {
-    requestIdleCallback(process);
-    return;
-  }
-
-  invoke(SeelenCommand.WriteFile, {
-    filename: "index.log",
-    content: JSON.stringify({
-      totalFiles: _foldersAsStartMenuItems.length,
-      extensionCounts,
-    }),
-  });
-}
-
-requestIdleCallback(process);
