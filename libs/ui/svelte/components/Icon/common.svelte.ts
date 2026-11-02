@@ -72,4 +72,3 @@ class IconPackManagerWrap {
 }
 
 export const iconPackManager = new IconPackManagerWrap();
-
