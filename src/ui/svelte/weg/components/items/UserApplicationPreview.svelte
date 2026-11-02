@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { Icon, MissingIcon } from "libs/ui/svelte/components/Icon/index.ts";
   import { windowsState, previews } from "../../state/windows.svelte.ts";
+  import { ensurePreviewsLoaded } from "../../state/getters.svelte.ts";
 
   interface Props {
     title: string;
@@ -14,7 +15,7 @@
   const preview = $derived(previews.isInitialized() ? previews.value[hwnd] : undefined);
 
   onMount(() => {
-    void previews.init().catch((error) => {
+    void ensurePreviewsLoaded().catch((error) => {
       console.error("Failed to load dock window previews:", error);
     });
   });
