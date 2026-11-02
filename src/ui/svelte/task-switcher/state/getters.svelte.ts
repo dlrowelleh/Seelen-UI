@@ -31,8 +31,4 @@ await Promise.all([
   monitors.init(),
 ]);
 
-// Window previews require screenshot capture, image encoding and a large base64 payload.
-// Do not block the first Alt+Tab frame on them; thumbnails fill in asynchronously.
-void previews.init().catch((error) => {
-  console.error("Failed to load task-switcher previews:", error);
-});
+// Window previews are initialized on the first switcher trigger, not during app startup.
