@@ -29,7 +29,8 @@ pub enum PodSource {
     Runtime,
 }
 
-const LIVENESS_PROVE_INTERVAL: Duration = Duration::from_secs(5);
+// Background widgets are mostly static; avoid waking every renderer every few seconds.
+const LIVENESS_PROVE_INTERVAL: Duration = Duration::from_secs(30);
 const LIVENESS_PROVE_WAIT_TIMEOUT: Duration = Duration::from_secs(3);
 const LIVENESS_PROVE_MAX_RETRIES: u8 = 5;
 // Grace period after session resume or soft_restart to let the webview finish reloading.
@@ -37,7 +38,8 @@ const LIVENESS_RELOAD_GRACE_PERIOD: Duration = Duration::from_secs(10);
 // Widgets sit occluded/background almost all the time, so the OS never signals real
 // memory pressure to their renderer and the JS heap balloons unchecked. Simulating it
 // periodically forces WebView2 to actually release freed pages back to the OS.
-const MEMORY_PRESSURE_INTERVAL: Duration = Duration::from_secs(30);
+// WebView2 can reclaim freed pages periodically without a frequent timer wake-up.
+const MEMORY_PRESSURE_INTERVAL: Duration = Duration::from_secs(300);
 
 pub struct WidgetDeployment {
     pub definition: Arc<Widget>,
