@@ -71,35 +71,44 @@ export interface FavAppItem {
 
 export type FavPinnedItem = FavAppItem | FavFolderItem;
 
-const initialState: FavPinnedItem[] = [];
+// Load the stored favorites immediately. Native Start-menu layout is queried later so
+// the Win-key popup can mount without waiting for Explorer's shell layout API.
+const pinnedItems = await persistentRune<FavPinnedItem[]>("favorites", []);
 
-try {
-  const layout = await invoke(SeelenCommand.GetNativeStartMenu);
-  for (const _item of layout.pinnedList) {
-    const item = _item as StartMenuLayoutItem as any;
-    if (item.desktopAppLink) {
-      let path = item.desktopAppLink.toLowerCase();
-      const found = startMenuItems.value.find((i) => i.path.toLowerCase() === path);
+if (!pinnedItems.hasStoredValue) {
+  void invoke(SeelenCommand.GetNativeStartMenu)
+    .then((layout) => {
+      // The user may have pinned/unpinned an app while the native query was in flight.
+      if (pinnedItems.hasStoredValue) return;
 
-      if (found) {
-        initialState.push({
-          type: "app",
-          itemId: getItemId(found),
-        });
-        continue;
+      const initialState: FavPinnedItem[] = [];
+      for (const _item of layout.pinnedList) {
+        const item = _item as StartMenuLayoutItem as any;
+        if (item.desktopAppLink) {
+          const path = item.desktopAppLink.toLowerCase();
+          const found = startMenuItems.value.find((i) => i.path.toLowerCase() === path);
+
+          if (found) {
+            initialState.push({
+              type: "app",
+              itemId: getItemId(found),
+            });
+            continue;
+          }
+        }
+
+        const itemId = item.packagedAppId || item.destopAppId || item.desktopAppLink;
+        if (typeof itemId === "string" && itemId.length > 0) {
+          initialState.push({ type: "app", itemId });
+        }
       }
-    }
 
-    initialState.push({
-      type: "app",
-      itemId: item.packagedAppId || item.destopAppId || item.desktopAppLink,
+      pinnedItems.value = initialState;
+    })
+    .catch((error) => {
+      console.error("Failed to get native pinned items:", error);
     });
-  }
-} catch (error) {
-  console.error("Failed to get native pinned items:", error);
 }
-
-const pinnedItems = await persistentRune<FavPinnedItem[]>("favorites", initialState);
 
 // Get unique identifier for an item
 function getItemId(item: StartMenuItem): string {
@@ -260,6 +269,9 @@ function disbandFolder(folderId: string): void {
 // Verify pinned items still exist
 function verifyPinnedItems() {
   const items = startMenuItems.value;
+  // The background Start-menu index may still be loading. Do not prune native favorites
+  // against the intentionally empty first snapshot; ItemsRefreshed will rerun this effect.
+  if (items.length === 0) return;
   const folderItems = foldersAsStartMenuItems.value;
   const validIds = new Set([...items, ...folderItems].map(getItemId));
 
