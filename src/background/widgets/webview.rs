@@ -8,7 +8,8 @@ use seelen_core::{
 };
 
 use tauri::Manager;
-use windows::Win32::Foundation::{BOOL, HWND};
+use windows::Win32::Foundation::HWND;
+use windows_core::BOOL;
 
 use crate::{
     app::get_app_handle,
@@ -211,7 +212,7 @@ pub fn suspend_if_hidden(webview: &tauri::WebviewWindow) {
             let handler =
                 TrySuspendCompletedHandler::create(Box::new(move |error_code, is_successful| {
                     match error_code {
-                        Ok(()) if is_successful.as_bool() => {
+                        Ok(()) if is_successful => {
                             log::trace!("Hidden WebView2 renderer suspended");
                         }
                         Ok(()) => {
