@@ -8,16 +8,13 @@
 
   const MAX_RETRIES = 3;
   const WAITING_TIMEOUT_MS = 3000;
-  const STALL_CHECK_INTERVAL_MS = 5000;
   const RETRY_RESET_MS = 15000;
 
   let videoElement: HTMLVideoElement | undefined = $state();
   let waitingTimeout: ReturnType<typeof setTimeout> | undefined;
   let retryResetTimeout: ReturnType<typeof setTimeout> | undefined;
-  let stallCheckInterval: ReturnType<typeof setInterval> | undefined;
 
   let retryCount = 0;
-  let lastTimeUpdate = 0;
   let isLoaded = false;
   let isReloading = false;
   let pendingSeekTime: number | null = null;
@@ -33,10 +30,6 @@
     if (retryResetTimeout) {
       clearTimeout(retryResetTimeout);
       retryResetTimeout = undefined;
-    }
-    if (stallCheckInterval) {
-      clearInterval(stallCheckInterval);
-      stallCheckInterval = undefined;
     }
   }
 
@@ -67,20 +60,6 @@
     }, RETRY_RESET_MS);
   }
 
-  function startStallCheck() {
-    if (stallCheckInterval) clearInterval(stallCheckInterval);
-    stallCheckInterval = setInterval(() => {
-      if (!videoElement || paused || !isLoaded || isReloading) return;
-      const currentTime = videoElement.currentTime;
-      if (
-        Math.abs(currentTime - lastTimeUpdate) < 0.01 &&
-        videoElement.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
-      ) {
-        tryRecover("stall-check");
-      }
-      lastTimeUpdate = currentTime;
-    }, STALL_CHECK_INTERVAL_MS);
-  }
 
   // Pausing a video element alone can retain its media pipeline and decoded buffers.
   // Detach the source while paused; reattach and seek to the previous position on resume.
@@ -100,7 +79,6 @@
       attachedSrc = "";
       isLoaded = false;
       isReloading = false;
-      lastTimeUpdate = 0;
       return;
     }
 
@@ -183,10 +161,6 @@
     }
   }
 
-  function handleTimeUpdate() {
-    if (videoElement && !paused) lastTimeUpdate = videoElement.currentTime;
-  }
-
   onDestroy(() => {
     clearRecoveryTimers();
     if (videoElement) {
@@ -220,7 +194,6 @@
   onstalled={handleStalled}
   oncanplay={handleCanPlay}
   onerror={handleError}
-  ontimeupdate={handleTimeUpdate}
 ></video>
 
 <style>
