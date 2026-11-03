@@ -204,7 +204,7 @@ export function VideoWallpaper({ definition, config, muted, paused, onLoad }: De
       loop
       playsInline
       disableRemotePlayback
-      preload="auto"
+      preload="metadata"
       playbackRate={getPlaybackRate(config.playbackSpeed)}
       onLoadedMetadata={handleLoadedMetadata}
       onWaiting={handleWaiting}
