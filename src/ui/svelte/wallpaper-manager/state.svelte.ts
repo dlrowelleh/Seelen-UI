@@ -34,12 +34,14 @@ $effect.root(() => {
 });
 
 let idle = $state(false);
+// Stop animated wallpaper sooner when the desktop is idle to avoid continuous video decoding.
+const IDLE_WALLPAPER_PAUSE_MS = 60_000;
 const setAsIdle = debounce(
   () => {
     idle = true;
   },
-  1000 * 60 * 3,
-); // 3 min
+  IDLE_WALLPAPER_PAUSE_MS,
+);
 subscribe(SeelenEvent.GlobalMouseMove, () => {
   if (idle) idle = false;
   setAsIdle();
