@@ -1,6 +1,8 @@
 use std::{
-    sync::{Arc, atomic::{AtomicU8, AtomicU64, Ordering}},
-
+    sync::{
+        Arc,
+        atomic::{AtomicU8, AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 
