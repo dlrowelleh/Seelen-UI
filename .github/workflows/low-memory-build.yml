@@ -1,6 +1,13 @@
 name: Low-memory Windows setup build
 
 on:
+  push:
+    branches:
+      - perf/hidden-widget-eviction-clean
+    paths:
+      - "src/background/widgets/loader.rs"
+      - "docs/low-memory-validation.md"
+      - ".github/workflows/low-memory-build.yml"
   pull_request:
     branches:
       - master
