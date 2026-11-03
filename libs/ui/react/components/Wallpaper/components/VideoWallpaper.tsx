@@ -8,186 +8,131 @@ import cs from "../index.module.css";
 
 const MAX_RETRIES = 3;
 const WAITING_TIMEOUT_MS = 3000;
-const STALL_CHECK_INTERVAL_MS = 5000;
 
 export function VideoWallpaper({ definition, config, muted, paused, onLoad }: DefinedWallProps) {
   const ref = useRef<HTMLVideoElement>(null);
   const waitingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const savedTimeRef = useRef<number | null>(null);
   const retryCountRef = useRef(0);
-  const lastTimeUpdateRef = useRef(0);
   const isLoadedRef = useRef(false);
+  const attachedSrcRef = useRef("");
+  const lastVideoSrcRef = useRef("");
 
   const videoSrc = useMemo(
     () => convertFileSrc(definition.metadata.path + "\\" + definition.filename!),
     [definition.metadata.path, definition.filename],
   );
 
-  // Monitor for stalls by checking timeupdate
+  // A paused video can retain its decoder and frame buffers. Detach its source to
+  // release those resources, then restore the playback position after metadata loads.
   useEffect(() => {
-    const checkInterval = setInterval(() => {
-      if (ref.current && !paused && isLoadedRef.current) {
-        const currentTime = ref.current.currentTime;
+    const video = ref.current;
+    if (!video) return;
 
-        // If time hasn't changed and video should be playing, it's stalled
-        if (
-          currentTime === lastTimeUpdateRef.current &&
-          ref.current.readyState < HTMLMediaElement.HAVE_FUTURE_DATA &&
-          retryCountRef.current < MAX_RETRIES
-        ) {
-          console.debug("Video appears stalled, attempting recovery");
-          retryCountRef.current++;
-          ref.current.load();
-          ref.current.currentTime = currentTime;
-          ref.current.play().catch((err) => {
-            console.error("Failed to resume video after stall:", err);
-          });
-        }
+    if (lastVideoSrcRef.current && lastVideoSrcRef.current !== videoSrc) {
+      savedTimeRef.current = null;
+    }
+    lastVideoSrcRef.current = videoSrc;
 
-        lastTimeUpdateRef.current = currentTime;
+    if (paused) {
+      if (attachedSrcRef.current === videoSrc) {
+        savedTimeRef.current = video.currentTime;
       }
-    }, STALL_CHECK_INTERVAL_MS);
+      video.pause();
+      if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+      waitingTimeoutRef.current = undefined;
+      retryTimeoutRef.current = undefined;
+      video.removeAttribute("src");
+      video.load();
+      attachedSrcRef.current = "";
+      isLoadedRef.current = false;
+      return;
+    }
 
-    return () => clearInterval(checkInterval);
-  }, [paused]);
+    if (attachedSrcRef.current !== videoSrc) {
+      attachedSrcRef.current = videoSrc;
+      retryCountRef.current = 0;
+      isLoadedRef.current = false;
+      video.src = videoSrc;
+      video.load();
+    } else if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      video.play().catch((err) => console.error("Failed to play video:", err));
+    }
+  }, [paused, videoSrc]);
 
-  // Cleanup on unmount to prevent memory leaks
   useEffect(() => {
-    // https://github.com/facebook/react/issues/15583
-    // this is a workaround for a bug in js that causes memory leak on video elements
     return () => {
-      if (waitingTimeoutRef.current) {
-        clearTimeout(waitingTimeoutRef.current);
-      }
+      if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
       if (ref.current) {
         ref.current.pause();
         ref.current.removeAttribute("src");
         ref.current.load();
-        if (globalThis.gc) {
-          setTimeout(() => globalThis.gc?.(), 100);
-        }
       }
     };
   }, []);
 
-  // Handle pause/play state changes
-  useEffect(() => {
-    if (ref.current && paused !== undefined) {
-      if (paused) {
-        ref.current.pause();
-      } else if (ref.current.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        ref.current.play().catch((err) => {
-          console.error("Failed to play video:", err);
-        });
-      }
-    }
-  }, [paused]);
-
   const handleWaiting = () => {
-    // Clear any existing timeout
-    if (waitingTimeoutRef.current) {
-      clearTimeout(waitingTimeoutRef.current);
-    }
-
-    // Set a timeout to detect if truly stuck
+    if (paused) return;
+    if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
     waitingTimeoutRef.current = setTimeout(() => {
-      if (ref.current && retryCountRef.current < MAX_RETRIES) {
-        console.debug(
-          `Video stuck in waiting state, retry ${retryCountRef.current + 1}/${MAX_RETRIES}`,
-        );
-        retryCountRef.current++;
-
-        const currentTime = ref.current.currentTime;
-
-        // Full reload to recover from stuck state
-        ref.current.load();
-
-        // Restore position if it wasn't at the beginning
-        if (currentTime > 0) {
-          ref.current.currentTime = currentTime;
-        }
-
-        if (!paused) {
-          ref.current.play().catch((err) => {
-            console.error("Failed to resume video after waiting timeout:", err);
-          });
-        }
-      }
+      waitingTimeoutRef.current = undefined;
+      const video = ref.current;
+      if (!video || paused || retryCountRef.current >= MAX_RETRIES) return;
+      retryCountRef.current++;
+      const currentTime = video.currentTime;
+      video.load();
+      if (currentTime > 0) savedTimeRef.current = currentTime;
     }, WAITING_TIMEOUT_MS);
   };
 
   const handlePlaying = () => {
-    // Clear timeout when playing successfully
-    if (waitingTimeoutRef.current) {
-      clearTimeout(waitingTimeoutRef.current);
-      waitingTimeoutRef.current = undefined;
-    }
-    // Reset retry count on successful playback
+    if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+    waitingTimeoutRef.current = undefined;
     retryCountRef.current = 0;
   };
 
   const handleStalled = () => {
-    // Stalled = browser thinks it can play but isn't fetching data
-    if (ref.current && retryCountRef.current < MAX_RETRIES) {
-      console.debug("Video network stalled, forcing reload");
-      retryCountRef.current++;
-
-      const currentTime = ref.current.currentTime;
-      ref.current.load();
-      ref.current.currentTime = currentTime;
-
-      if (!paused) {
-        ref.current.play().catch((err) => {
-          console.error("Failed to resume video after stall:", err);
-        });
-      }
-    }
+    const video = ref.current;
+    if (!video || paused || retryCountRef.current >= MAX_RETRIES) return;
+    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
+    retryCountRef.current++;
+    savedTimeRef.current = video.currentTime;
+    video.load();
   };
 
   const handleCanPlay = () => {
-    if (ref.current && !paused) {
-      ref.current.play().catch((err) => {
-        console.error("Failed to play video on canplay:", err);
-      });
+    const video = ref.current;
+    if (!video || paused) return;
+    if (savedTimeRef.current !== null) {
+      const time = savedTimeRef.current;
+      savedTimeRef.current = null;
+      if (Number.isFinite(time) && time > 0) video.currentTime = time;
     }
+    video.play().catch((err) => console.error("Failed to play video on canplay:", err));
   };
 
   const handleLoadedMetadata = () => {
+    if (paused) return;
     isLoadedRef.current = true;
     onLoad?.();
   };
 
   const handleError = (e: Event) => {
-    const target = e.target as HTMLVideoElement;
-    const error = target.error;
-
-    if (error) {
-      console.error("Video error:", {
-        code: error.code,
-        message: error.message,
-        src: videoSrc,
-      });
-
-      // Attempt recovery on certain errors
-      if (error.code === MediaError.MEDIA_ERR_NETWORK && retryCountRef.current < MAX_RETRIES) {
-        console.debug("Network error, attempting recovery");
-        retryCountRef.current++;
-        setTimeout(() => {
-          if (ref.current) {
-            ref.current.load();
-            if (!paused) {
-              ref.current.play().catch((err) => {
-                console.error("Failed to recover from network error:", err);
-              });
-            }
-          }
-        }, 1000);
-      }
-    }
-  };
-
-  const handleTimeUpdate = () => {
-    if (ref.current) {
-      lastTimeUpdateRef.current = ref.current.currentTime;
+    if (paused) return;
+    const error = (e.target as HTMLVideoElement).error;
+    if (!error) return;
+    console.error("Video error:", { code: error.code, message: error.message, src: videoSrc });
+    if (error.code === MediaError.MEDIA_ERR_NETWORK && retryCountRef.current < MAX_RETRIES) {
+      retryCountRef.current++;
+      retryTimeoutRef.current = setTimeout(() => {
+        retryTimeoutRef.current = undefined;
+        const video = ref.current;
+        if (!video || paused) return;
+        video.load();
+      }, 1000);
     }
   };
 
@@ -197,14 +142,12 @@ export function VideoWallpaper({ definition, config, muted, paused, onLoad }: De
       className={cx(cs.wallpaper, "wallpaper")}
       style={getWallpaperStyles(config)}
       ref={ref}
-      src={videoSrc}
       controls={false}
       muted={muted || config.muted}
-      autoPlay={!paused}
       loop
       playsInline
       disableRemotePlayback
-      preload="auto"
+      preload={paused ? "none" : "metadata"}
       playbackRate={getPlaybackRate(config.playbackSpeed)}
       onLoadedMetadata={handleLoadedMetadata}
       onWaiting={handleWaiting}
@@ -212,7 +155,6 @@ export function VideoWallpaper({ definition, config, muted, paused, onLoad }: De
       onStalled={handleStalled}
       onCanPlay={handleCanPlay}
       onError={handleError}
-      onTimeUpdate={handleTimeUpdate}
     />
   );
 }
