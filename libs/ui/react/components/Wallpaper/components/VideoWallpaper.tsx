@@ -8,7 +8,6 @@ import cs from "../index.module.css";
 
 const MAX_RETRIES = 3;
 const WAITING_TIMEOUT_MS = 3000;
-const STALL_CHECK_INTERVAL_MS = 5000;
 
 export function VideoWallpaper({ definition, config, muted, paused, onLoad }: DefinedWallProps) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -16,9 +15,9 @@ export function VideoWallpaper({ definition, config, muted, paused, onLoad }: De
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const savedTimeRef = useRef<number | null>(null);
   const retryCountRef = useRef(0);
-  const lastTimeUpdateRef = useRef(0);
   const isLoadedRef = useRef(false);
   const attachedSrcRef = useRef("");
+  const lastVideoSrcRef = useRef("");
 
   const videoSrc = useMemo(
     () => convertFileSrc(definition.metadata.path + "\\" + definition.filename!),
@@ -30,6 +29,11 @@ export function VideoWallpaper({ definition, config, muted, paused, onLoad }: De
   useEffect(() => {
     const video = ref.current;
     if (!video) return;
+
+    if (lastVideoSrcRef.current && lastVideoSrcRef.current !== videoSrc) {
+      savedTimeRef.current = null;
+    }
+    lastVideoSrcRef.current = videoSrc;
 
     if (paused) {
       if (attachedSrcRef.current === videoSrc) {
@@ -48,9 +52,6 @@ export function VideoWallpaper({ definition, config, muted, paused, onLoad }: De
     }
 
     if (attachedSrcRef.current !== videoSrc) {
-      if (attachedSrcRef.current && attachedSrcRef.current !== videoSrc) {
-        savedTimeRef.current = null;
-      }
       attachedSrcRef.current = videoSrc;
       retryCountRef.current = 0;
       isLoadedRef.current = false;
@@ -60,25 +61,6 @@ export function VideoWallpaper({ definition, config, muted, paused, onLoad }: De
       video.play().catch((err) => console.error("Failed to play video:", err));
     }
   }, [paused, videoSrc]);
-
-  useEffect(() => {
-    if (paused) return;
-    const interval = setInterval(() => {
-      const video = ref.current;
-      if (!video || !isLoadedRef.current) return;
-      const currentTime = video.currentTime;
-      if (
-        currentTime === lastTimeUpdateRef.current &&
-        video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA &&
-        retryCountRef.current < MAX_RETRIES
-      ) {
-        retryCountRef.current++;
-        video.load();
-      }
-      lastTimeUpdateRef.current = currentTime;
-    }, STALL_CHECK_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [paused]);
 
   useEffect(() => {
     return () => {
@@ -154,10 +136,6 @@ export function VideoWallpaper({ definition, config, muted, paused, onLoad }: De
     }
   };
 
-  const handleTimeUpdate = () => {
-    if (ref.current && !paused) lastTimeUpdateRef.current = ref.current.currentTime;
-  };
-
   return (
     <video
       id={definition.id}
@@ -177,7 +155,6 @@ export function VideoWallpaper({ definition, config, muted, paused, onLoad }: De
       onStalled={handleStalled}
       onCanPlay={handleCanPlay}
       onError={handleError}
-      onTimeUpdate={handleTimeUpdate}
     />
   );
 }
