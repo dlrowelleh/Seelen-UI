@@ -1,6 +1,13 @@
 name: Low-memory Windows setup build
 
 on:
+  push:
+    branches:
+      - perf/video-wallpaper-gpu-idle
+    paths:
+      - "src/**"
+      - "libs/**"
+      - ".github/workflows/low-memory-build.yml"
   pull_request:
     branches:
       - master
