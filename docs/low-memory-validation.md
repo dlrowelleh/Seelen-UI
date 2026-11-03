@@ -48,6 +48,8 @@ reported separately.
 - The low memory target is also best-effort and may page inactive memory to disk. A widget may briefly respond more
   slowly after becoming active.
 - Internal widgets are eligible for suspension because they are owned by Seelen.
+- Lazy internal widgets are evicted after 120 seconds continuously hidden. Their pod remains registered as Pending;
+  the existing trigger path recreates the WebView on demand. Non-lazy internal widgets are suspended but retained.
 - Third-party widgets are not suspended: they receive the low-memory target so timers, audio, and network activity can
   continue.
 - Do not compare a run with hardware acceleration enabled to one with it disabled and attribute all differences to
@@ -58,6 +60,7 @@ reported separately.
 ## Known scope
 
 This change keeps WebView2 and Tauri. It does not claim zero-memory operation: visible widgets necessarily retain a
-renderer and GPU/window resources. Destruction/recreation of hidden widget windows is not enabled because the current
-widget deployment lifecycle automatically reconciles destroyed windows; implementing eviction safely requires a
-persistent pod state and restoration contract.
+renderer and GPU/window resources. Eviction is deliberately limited to lazy Seelen-owned internal widgets, whose
+existing trigger path can recreate a Pending pod. Generation tokens distinguish intentional close events from
+unexpected destruction so an eviction is not mistaken for a crash. Third-party widgets and non-lazy shell surfaces
+are never evicted by this policy.

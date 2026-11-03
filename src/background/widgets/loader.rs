@@ -1,5 +1,8 @@
 use std::{
-    sync::{Arc, atomic::AtomicU8},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, AtomicU8, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -39,6 +42,8 @@ const LIVENESS_RELOAD_GRACE_PERIOD: Duration = Duration::from_secs(10);
 // retain script execution and receive WebView2's low-memory target after the same grace period.
 const HIDDEN_WEBVIEW_SUSPEND_CHECK_INTERVAL: Duration = Duration::from_secs(15);
 const HIDDEN_WEBVIEW_SUSPEND_GRACE_PERIOD: Duration = Duration::from_secs(20);
+// Lazy internal popups can be recreated by the existing trigger path after eviction.
+const HIDDEN_WEBVIEW_EVICTION_IDLE_PERIOD: Duration = Duration::from_secs(120);
 
 pub struct WidgetDeployment {
     pub definition: Arc<Widget>,
@@ -166,6 +171,8 @@ pub struct WidgetPod {
     liveness_prove_handle: Option<tokio::task::JoinHandle<()>>,
     hidden_suspend_handle: Option<tokio::task::JoinHandle<()>>,
     retries: Arc<AtomicU8>,
+    /// Distinguishes intentional eviction from unexpected native window destruction.
+    window_generation: Arc<AtomicU64>,
 }
 
 impl WidgetPod {
@@ -180,6 +187,7 @@ impl WidgetPod {
             liveness_prove_handle: None,
             hidden_suspend_handle: None,
             retries: Arc::new(AtomicU8::new(0)),
+            window_generation: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -229,15 +237,28 @@ impl WidgetPod {
         self.set_status(WidgetStatus::Mounting);
 
         let label = self.label.clone();
+        let window_generation = self.window_generation.fetch_add(1, Ordering::AcqRel) + 1;
+        let generation = self.window_generation.clone();
         window.0.on_window_event(move |event| {
             if let tauri::WindowEvent::Destroyed = event {
+                // An intentional eviction invalidates this generation before close().
+                // Ignore its delayed Destroyed event; the pod remains registered as Pending.
+                if generation.load(Ordering::Acquire) != window_generation {
+                    return;
+                }
                 // Defer window creation off the UI message-loop thread.
                 // Calling start_all_webviews() (→ WidgetWebview::create → builder.build)
                 // synchronously here triggers a re-entrant ZwUserDestroyWindow while the
                 // message pump is still inside the destruction handler, which causes the
                 // APPLICATION_HANG_ENDTASK_HungThreadIsIdle crash.
                 let label = label.clone();
+                let generation = generation.clone();
                 std::thread::spawn(move || {
+                    // Recheck after crossing the thread boundary: eviction may have
+                    // invalidated this callback after the native event was delivered.
+                    if generation.load(Ordering::Acquire) != window_generation {
+                        return;
+                    }
                     WIDGET_MANAGER.deployments.get(&label.widget_id, |deploy| {
                         deploy.kill_pod(&label);
                         deploy.reconcile();
@@ -267,11 +288,20 @@ impl WidgetPod {
             definition.loader,
             WidgetLoader::Internal | WidgetLoader::InternalReact
         );
-        self.start_hidden_webview_suspension(suspend_when_hidden);
+        self.start_hidden_webview_suspension(
+            suspend_when_hidden,
+            definition.lazy && suspend_when_hidden,
+            window_generation,
+        );
         self.start_liveness_prove(suspend_when_hidden);
     }
 
-    fn start_hidden_webview_suspension(&mut self, suspend_scripts: bool) {
+    fn start_hidden_webview_suspension(
+        &mut self,
+        suspend_scripts: bool,
+        evict_when_hidden: bool,
+        window_generation: u64,
+    ) {
         let Some(window) = &self.window else {
             return;
         };
@@ -310,6 +340,24 @@ impl WidgetPod {
                     continue;
                 }
 
+                if evict_when_hidden
+                    && hidden_since.elapsed() >= HIDDEN_WEBVIEW_EVICTION_IDLE_PERIOD
+                {
+                    WIDGET_MANAGER.deployments.get(&label.widget_id, |deployment| {
+                        let mut remove_runtime_pod = false;
+                        deployment.pods.get(&label, |pod| {
+                            remove_runtime_pod = matches!(&pod.source, PodSource::Runtime)
+                                && pod.evict_hidden_window(window_generation);
+                        });
+                        // Runtime pods are one-shot popup instances. Remove the lightweight
+                        // pod as well; a future trigger will create a fresh instance/owner HWND.
+                        if remove_runtime_pod {
+                            deployment.kill_pod(&label);
+                        }
+                    });
+                    break;
+                }
+
                 if suspend_scripts {
                     // Internal widgets have no required background work. TrySuspend
                     // pauses JS timers/animations and moves WebView2 to low memory.
@@ -324,6 +372,41 @@ impl WidgetPod {
         });
 
         self.hidden_suspend_handle = Some(handle);
+    }
+
+    /// Releases a hidden lazy internal widget's native window while retaining its pod.
+    /// The next trigger follows the existing Pending -> Creating path and recreates it.
+    fn evict_hidden_window(&mut self, expected_generation: u64) -> bool {
+        if self.window_generation.load(Ordering::Acquire) != expected_generation
+            || self.status() != &WidgetStatus::Ready
+        {
+            return false;
+        }
+
+        let Some(window) = self.window.as_ref() else {
+            return false;
+        };
+        // Fail closed: if visibility cannot be queried, keep the window alive.
+        if window.0.is_visible().unwrap_or(true) {
+            return false;
+        }
+
+        // Invalidate the Destroyed callback before requesting native destruction.
+        self.window_generation.fetch_add(1, Ordering::AcqRel);
+        self.set_status(WidgetStatus::Pending);
+
+        if let Some(handle) = self.liveness_prove_handle.take() {
+            handle.abort();
+        }
+
+        if let Some(window) = self.window.take() {
+            let _ = window.0.close();
+            drop(window);
+        }
+
+        log::info!(target: &self.label.decoded, "Evicted hidden lazy WebView; it will be recreated on demand");
+        notify_widget_statuses_change();
+        true
     }
 
     fn start_liveness_prove(&mut self, skip_hidden_internal_widgets: bool) {
