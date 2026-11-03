@@ -344,9 +344,16 @@ impl WidgetPod {
                     && hidden_since.elapsed() >= HIDDEN_WEBVIEW_EVICTION_IDLE_PERIOD
                 {
                     WIDGET_MANAGER.deployments.get(&label.widget_id, |deployment| {
+                        let mut remove_runtime_pod = false;
                         deployment.pods.get(&label, |pod| {
-                            pod.evict_hidden_window(window_generation);
+                            remove_runtime_pod = matches!(&pod.source, PodSource::Runtime)
+                                && pod.evict_hidden_window(window_generation);
                         });
+                        // Runtime pods are one-shot popup instances. Remove the lightweight
+                        // pod as well; a future trigger will create a fresh instance/owner HWND.
+                        if remove_runtime_pod {
+                            deployment.kill_pod(&label);
+                        }
                     });
                     break;
                 }
@@ -369,19 +376,19 @@ impl WidgetPod {
 
     /// Releases a hidden lazy internal widget's native window while retaining its pod.
     /// The next trigger follows the existing Pending -> Creating path and recreates it.
-    fn evict_hidden_window(&mut self, expected_generation: u64) {
+    fn evict_hidden_window(&mut self, expected_generation: u64) -> bool {
         if self.window_generation.load(Ordering::Acquire) != expected_generation
             || self.status() != &WidgetStatus::Ready
         {
-            return;
+            return false;
         }
 
         let Some(window) = self.window.as_ref() else {
-            return;
+            return false;
         };
         // Fail closed: if visibility cannot be queried, keep the window alive.
         if window.0.is_visible().unwrap_or(true) {
-            return;
+            return false;
         }
 
         // Invalidate the Destroyed callback before requesting native destruction.
@@ -399,6 +406,7 @@ impl WidgetPod {
 
         log::info!(target: &self.label.decoded, "Evicted hidden lazy WebView; it will be recreated on demand");
         notify_widget_statuses_change();
+        true
     }
 
     fn start_liveness_prove(&mut self, skip_hidden_internal_widgets: bool) {
