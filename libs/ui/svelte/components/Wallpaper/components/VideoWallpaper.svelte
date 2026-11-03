@@ -37,6 +37,8 @@
 
   // Single recovery path shared by all stall detectors.
   function tryRecover(source: string) {
+    // A paused wallpaper must never restart decoding through a delayed recovery callback.
+    if (paused || !videoElement) return;
     if (retryCount < MAX_RETRIES) {
       console.debug(`Video recovery [${source}], attempt ${retryCount + 1}/${MAX_RETRIES}`);
       retryCount++;
@@ -165,7 +167,25 @@
     isLoaded = false;
     isReloading = false;
     pendingSeekTime = null;
+  });
+
+  // Do not keep a periodic stall detector alive while the video is paused.
+  $effect(() => {
+    if (paused || !videoElement) {
+      if (stallCheckInterval) {
+        clearInterval(stallCheckInterval);
+        stallCheckInterval = undefined;
+      }
+      return;
+    }
+
     startStallCheck();
+    return () => {
+      if (stallCheckInterval) {
+        clearInterval(stallCheckInterval);
+        stallCheckInterval = undefined;
+      }
+    };
   });
 
   onDestroy(() => {
@@ -204,7 +224,7 @@
   playsinline
   disableRemotePlayback
   disablepictureinpicture
-  preload="auto"
+  preload="metadata"
   onloadedmetadata={handleLoadedMetadata}
   onwaiting={handleWaiting}
   onplaying={handlePlaying}
@@ -219,11 +239,5 @@
     position: relative;
     width: 100%;
     height: 100%;
-  }
-
-  video {
-    transform: translateZ(0);
-    will-change: transform;
-    backface-visibility: hidden;
   }
 </style>
