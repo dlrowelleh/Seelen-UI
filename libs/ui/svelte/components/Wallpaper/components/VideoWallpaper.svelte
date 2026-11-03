@@ -19,6 +19,7 @@
   let isReloading = false;
   let pendingSeekTime: number | null = null;
   let attachedSrc = "";
+  let lastVideoSrc = "";
 
   const videoSrc = $derived(convertFileSrc(definition.metadata.path + "\\" + definition.filename!));
 
@@ -60,18 +61,17 @@
     }, RETRY_RESET_MS);
   }
 
-
-  // Pausing a video element alone can retain its media pipeline and decoded buffers.
-  // Detach the source while paused; reattach and seek to the previous position on resume.
+  // Detaching the source releases idle decoder resources; resume restores the saved position.
   $effect(() => {
     const shouldPause = paused;
     const source = videoSrc;
     if (!videoElement) return;
 
+    if (lastVideoSrc && lastVideoSrc !== source) pendingSeekTime = null;
+    lastVideoSrc = source;
+
     if (shouldPause) {
-      if (attachedSrc && attachedSrc === source) {
-        pendingSeekTime = videoElement.currentTime;
-      }
+      if (attachedSrc === source) pendingSeekTime = videoElement.currentTime;
       videoElement.pause();
       clearRecoveryTimers();
       videoElement.removeAttribute("src");
@@ -83,7 +83,6 @@
     }
 
     if (attachedSrc !== source) {
-      if (attachedSrc && attachedSrc !== source) pendingSeekTime = null;
       clearRecoveryTimers();
       retryCount = 0;
       isLoaded = false;
@@ -133,9 +132,7 @@
     if (pendingSeekTime !== null) {
       const seekTime = pendingSeekTime;
       pendingSeekTime = null;
-      if (Number.isFinite(seekTime) && seekTime > 0) {
-        videoElement.currentTime = seekTime;
-      }
+      if (Number.isFinite(seekTime) && seekTime > 0) videoElement.currentTime = seekTime;
     }
     videoElement.play().catch((err) => console.error("Failed to play video on canplay:", err));
   }
@@ -149,8 +146,7 @@
   function handleError(e: Event) {
     isReloading = false;
     if (paused) return;
-    const target = e.target as HTMLVideoElement;
-    const error = target.error;
+    const error = (e.target as HTMLVideoElement).error;
     if (!error) return;
 
     console.error("Video error:", { code: error.code, message: error.message, src: videoSrc });
