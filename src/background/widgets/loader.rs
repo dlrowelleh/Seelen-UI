@@ -1,7 +1,7 @@
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicU8, AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicU8, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -252,7 +252,13 @@ impl WidgetPod {
                 // message pump is still inside the destruction handler, which causes the
                 // APPLICATION_HANG_ENDTASK_HungThreadIsIdle crash.
                 let label = label.clone();
+                let generation = generation.clone();
                 std::thread::spawn(move || {
+                    // Recheck after crossing the thread boundary: eviction may have
+                    // invalidated this callback after the native event was delivered.
+                    if generation.load(Ordering::Acquire) != window_generation {
+                        return;
+                    }
                     WIDGET_MANAGER.deployments.get(&label.widget_id, |deploy| {
                         deploy.kill_pod(&label);
                         deploy.reconcile();
